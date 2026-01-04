@@ -1,4 +1,31 @@
 
+export type UserRole = 'HR' | 'Employee';
+
+export interface User {
+  id: string;
+  name: string;
+  role: UserRole;
+  email: string;
+  avatar: string;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  dueDate: string;
+  status: 'Pending' | 'In Progress' | 'Completed';
+  priority: 'Low' | 'Medium' | 'High';
+}
+
+export interface Notification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  timestamp: string;
+  isRead: boolean;
+}
+
 export interface Employee {
   id: string;
   name: string;
@@ -8,6 +35,15 @@ export interface Employee {
   status: 'Active' | 'On Leave' | 'Inactive';
   avatar: string;
   joinDate: string;
+  tasks?: Task[];
+}
+
+export interface Document {
+  id: string;
+  name: string;
+  type: string;
+  uploadDate: string;
+  status: 'Verified' | 'Pending';
 }
 
 export interface JobPosting {
