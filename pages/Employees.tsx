@@ -1,6 +1,13 @@
 
-import React, { useState, useRef } from 'react';
-import { Search, Filter, MoreVertical, Plus, Trash2, UserMinus, FolderInput, CheckCircle2, X, ClipboardList, Clock, AlertCircle, CheckCircle, UserPlus, Mail, Briefcase, Building2, ShieldCheck, Calendar as CalendarIcon, UserRoundCheck, ArrowRightLeft, Download, Upload } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { 
+  Search, Filter, MoreVertical, Plus, Trash2, UserMinus, FolderInput, 
+  CheckCircle2, X, ClipboardList, Clock, AlertCircle, CheckCircle, 
+  UserPlus, Mail, Briefcase, Building2, ShieldCheck, 
+  Calendar as CalendarIcon, UserRoundCheck, ArrowRightLeft, 
+  Download, Upload, Snowflake, Power, UserCheck,
+  LayoutList, LayoutGrid, Rows3
+} from 'lucide-react';
 import { DEPARTMENTS } from '../constants';
 import { Employee, Task } from '../types';
 
@@ -10,13 +17,16 @@ interface EmployeesProps {
   addNotification: (userId: string, title: string, message: string) => void;
 }
 
+type ViewMode = 'list' | 'grid' | 'compact';
+
 const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotification }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [showDeptMenu, setShowDeptMenu] = useState(false);
   const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null);
   const [isAddingEmployee, setIsAddingEmployee] = useState(false);
   const [reassigningTaskId, setReassigningTaskId] = useState<string | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [newEmp, setNewEmp] = useState({
@@ -32,11 +42,31 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
   const [newTaskDueDate, setNewTaskDueDate] = useState(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
   const [newTaskStatus, setNewTaskStatus] = useState<Task['status']>('Pending');
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => setMenuOpenId(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, []);
+
   const filteredEmployees = employees.filter(emp => 
     emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     emp.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
     emp.department.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handleUpdateStatus = (id: string, newStatus: Employee['status']) => {
+    setEmployees(prev => prev.map(emp => 
+      emp.id === id ? { ...emp, status: newStatus } : emp
+    ));
+    
+    const statusMsg = newStatus === 'Frozen' ? 'Your access has been temporarily frozen for security review.' : 
+                     newStatus === 'Active' ? 'Your account access has been restored to Active status.' :
+                     'Your account has been deactivated by the HR department.';
+    
+    addNotification(id, `Status Update: ${newStatus}`, statusMsg);
+    setMenuOpenId(null);
+  };
 
   const handleDownloadData = () => {
     const dataStr = JSON.stringify(employees, null, 2);
@@ -64,21 +94,19 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
       try {
         const json = JSON.parse(event.target?.result as string);
         if (Array.isArray(json)) {
-          // Simple validation: check if items have 'id' and 'name'
           const isValid = json.every(item => item.id && item.name);
           if (isValid) {
             setEmployees(json);
-            alert(`Database successfully updated with ${json.length} records.`);
+            alert(`Database successfully synchronized with ${json.length} records.`);
           } else {
             alert("Invalid data format. Please provide a valid employee JSON array.");
           }
         }
       } catch (err) {
-        alert("Error parsing file. Please ensure it is a valid JSON file.");
+        alert("Error parsing file. Please ensure it is a valid JSON database file.");
       }
     };
     reader.readAsText(file);
-    // Reset file input
     e.target.value = '';
   };
 
@@ -209,6 +237,60 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
     setReassigningTaskId(null);
   };
 
+  const StatusBadge = ({ status }: { status: Employee['status'] }) => (
+    <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${
+      status === 'Active' ? 'bg-green-50 text-green-700 border-green-100' :
+      status === 'On Leave' ? 'bg-yellow-50 text-yellow-700 border-yellow-100' :
+      status === 'Frozen' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+      'bg-gray-50 text-gray-700 border-gray-200'
+    }`}>
+      {status}
+    </span>
+  );
+
+  const ActionMenu = ({ emp }: { emp: Employee }) => (
+    <div className="relative inline-block text-left" onClick={(e) => e.stopPropagation()}>
+      <button 
+        onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === emp.id ? null : emp.id); }}
+        className="p-2 hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-100 rounded-xl text-gray-400 hover:text-blue-900 transition-all"
+      >
+        <MoreVertical size={18} />
+      </button>
+
+      {menuOpenId === emp.id && (
+        <div className="absolute right-0 top-10 w-48 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="p-2 space-y-1">
+            <button 
+              onClick={() => handleUpdateStatus(emp.id, 'Active')}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold text-green-700 hover:bg-green-50 transition-colors uppercase tracking-tight"
+            >
+              <UserCheck size={16} /> Activate User
+            </button>
+            <button 
+              onClick={() => handleUpdateStatus(emp.id, 'Inactive')}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 transition-colors uppercase tracking-tight"
+            >
+              <Power size={16} /> Deactivate User
+            </button>
+            <button 
+              onClick={() => handleUpdateStatus(emp.id, 'Frozen')}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold text-blue-700 hover:bg-blue-50 transition-colors uppercase tracking-tight"
+            >
+              <Snowflake size={16} /> Freeze Account
+            </button>
+            <div className="h-[1px] bg-gray-50 my-1 mx-2" />
+            <button 
+               onClick={() => setViewingEmployee(emp)}
+               className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-50 transition-colors uppercase tracking-tight"
+            >
+              <ClipboardList size={16} /> Manage Tasks
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500 pb-24 relative">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -247,8 +329,8 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
         </div>
       </header>
 
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="flex-1 relative">
+      <div className="flex flex-col md:flex-row gap-4 items-center">
+        <div className="flex-1 relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input 
             type="text" 
@@ -258,93 +340,238 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+        
+        <div className="flex items-center gap-2 p-1 bg-white border border-gray-200 rounded-2xl shadow-sm">
+          <button 
+            onClick={() => setViewMode('list')}
+            className={`p-2 rounded-xl transition-all ${viewMode === 'list' ? 'bg-blue-900 text-white shadow-md' : 'text-gray-400 hover:text-blue-900'}`}
+            title="List View"
+          >
+            <LayoutList size={20} />
+          </button>
+          <button 
+            onClick={() => setViewMode('grid')}
+            className={`p-2 rounded-xl transition-all ${viewMode === 'grid' ? 'bg-blue-900 text-white shadow-md' : 'text-gray-400 hover:text-blue-900'}`}
+            title="Grid View"
+          >
+            <LayoutGrid size={20} />
+          </button>
+          <button 
+            onClick={() => setViewMode('compact')}
+            className={`p-2 rounded-xl transition-all ${viewMode === 'compact' ? 'bg-blue-900 text-white shadow-md' : 'text-gray-400 hover:text-blue-900'}`}
+            title="Compact View"
+          >
+            <Rows3 size={20} />
+          </button>
+        </div>
+
         <button className="flex items-center gap-2 px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 shadow-sm font-bold text-xs uppercase tracking-widest">
           <Filter size={18} /> Filters
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="px-6 py-4 w-10">
-                  <input 
-                    type="checkbox" 
-                    className="w-4 h-4 rounded border-gray-300 text-blue-900 focus:ring-blue-900 accent-blue-900 cursor-pointer"
-                    checked={selectedIds.length > 0 && selectedIds.length === filteredEmployees.length}
-                    ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < filteredEmployees.length; }}
-                    onChange={toggleSelectAll}
-                  />
-                </th>
-                <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Employee</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Role & Dept</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tasks</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filteredEmployees.map((emp) => (
-                <tr 
-                  key={emp.id} 
-                  className={`hover:bg-blue-50/30 transition-colors group cursor-pointer ${selectedIds.includes(emp.id) ? 'bg-blue-50/50' : ''}`}
-                  onClick={() => setViewingEmployee(emp)}
-                >
-                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+      {/* Main Content Area based on View Mode */}
+      {viewMode === 'list' && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-in fade-in duration-300">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100">
+                  <th className="px-6 py-4 w-10">
                     <input 
                       type="checkbox" 
                       className="w-4 h-4 rounded border-gray-300 text-blue-900 focus:ring-blue-900 accent-blue-900 cursor-pointer"
-                      checked={selectedIds.includes(emp.id)}
-                      onChange={() => toggleSelect(emp.id)}
+                      checked={selectedIds.length > 0 && selectedIds.length === filteredEmployees.length}
+                      ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < filteredEmployees.length; }}
+                      onChange={toggleSelectAll}
                     />
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-3">
-                      <img src={emp.avatar} alt={emp.name} className="w-10 h-10 rounded-xl object-cover border border-gray-100 shadow-sm" />
-                      <div>
-                        <p className="text-sm font-bold text-blue-900">{emp.name}</p>
-                        <p className="text-[11px] text-gray-400 font-medium">{emp.email}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <p className="text-sm font-semibold text-gray-700">{emp.role}</p>
-                    <p className="text-[11px] text-blue-900/50 font-bold uppercase tracking-tight">{emp.department}</p>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${
-                      emp.status === 'Active' ? 'bg-green-50 text-green-700 border-green-100' :
-                      emp.status === 'On Leave' ? 'bg-yellow-50 text-yellow-700 border-yellow-100' :
-                      'bg-gray-50 text-gray-700 border-gray-200'
-                    }`}>
-                      {emp.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-blue-600 transition-all" 
-                          style={{ width: `${emp.tasks?.length ? (emp.tasks.filter(t => t.status === 'Completed').length / emp.tasks.length) * 100 : 0}%` }}
-                        ></div>
-                      </div>
-                      <span className="text-[10px] font-bold text-gray-400 uppercase">
-                        {emp.tasks?.filter(t => t.status === 'Completed').length || 0}/{emp.tasks?.length || 0}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
-                    <button className="p-2 hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-100 rounded-xl text-gray-400 hover:text-blue-900 transition-all">
-                      <MoreVertical size={18} />
-                    </button>
-                  </td>
+                  </th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Employee</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Role & Dept</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tasks</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredEmployees.map((emp) => (
+                  <tr 
+                    key={emp.id} 
+                    className={`hover:bg-blue-50/30 transition-colors group cursor-pointer ${selectedIds.includes(emp.id) ? 'bg-blue-50/50' : ''}`}
+                    onClick={() => setViewingEmployee(emp)}
+                  >
+                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                      <input 
+                        type="checkbox" 
+                        className="w-4 h-4 rounded border-gray-300 text-blue-900 focus:ring-blue-900 accent-blue-900 cursor-pointer"
+                        checked={selectedIds.includes(emp.id)}
+                        onChange={() => toggleSelect(emp.id)}
+                      />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-3">
+                        <img src={emp.avatar} alt={emp.name} className="w-10 h-10 rounded-xl object-cover border border-gray-100 shadow-sm" />
+                        <div>
+                          <p className="text-sm font-bold text-blue-900">{emp.name}</p>
+                          <p className="text-[11px] text-gray-400 font-medium">{emp.email}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <p className="text-sm font-semibold text-gray-700">{emp.role}</p>
+                      <p className="text-[11px] text-blue-900/50 font-bold uppercase tracking-tight">{emp.department}</p>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <StatusBadge status={emp.status} />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-blue-600 transition-all" 
+                            style={{ width: `${emp.tasks?.length ? (emp.tasks.filter(t => t.status === 'Completed').length / emp.tasks.length) * 100 : 0}%` }}
+                          ></div>
+                        </div>
+                        <span className="text-[10px] font-bold text-gray-400 uppercase">
+                          {emp.tasks?.filter(t => t.status === 'Completed').length || 0}/{emp.tasks?.length || 0}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <ActionMenu emp={emp} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
+
+      {viewMode === 'grid' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in fade-in slide-in-from-top-4 duration-300">
+          {filteredEmployees.map((emp) => (
+            <div 
+              key={emp.id}
+              className={`bg-white rounded-[2rem] p-6 border transition-all hover:shadow-xl hover:-translate-y-1 relative group cursor-pointer ${
+                selectedIds.includes(emp.id) ? 'border-blue-900 ring-2 ring-blue-900/10' : 'border-gray-100'
+              }`}
+              onClick={() => setViewingEmployee(emp)}
+            >
+              <div className="absolute top-4 right-4 z-10">
+                <ActionMenu emp={emp} />
+              </div>
+              
+              <div className="absolute top-6 left-6" onClick={(e) => e.stopPropagation()}>
+                <input 
+                  type="checkbox" 
+                  className="w-4 h-4 rounded border-gray-300 text-blue-900 focus:ring-blue-900 accent-blue-900 cursor-pointer"
+                  checked={selectedIds.includes(emp.id)}
+                  onChange={() => toggleSelect(emp.id)}
+                />
+              </div>
+
+              <div className="flex flex-col items-center text-center">
+                <div className="relative mb-4">
+                  <img 
+                    src={emp.avatar} 
+                    alt={emp.name} 
+                    className="w-24 h-24 rounded-[2rem] object-cover shadow-2xl shadow-blue-900/10 border-4 border-white" 
+                  />
+                  <div className="absolute -bottom-2 -right-2">
+                    <StatusBadge status={emp.status} />
+                  </div>
+                </div>
+                
+                <h3 className="text-lg font-bold text-blue-900">{emp.name}</h3>
+                <p className="text-xs font-bold text-blue-900/50 uppercase tracking-widest mt-1">{emp.role}</p>
+                <div className="mt-3 flex items-center gap-1.5 text-gray-400">
+                  <Building2 size={12} />
+                  <span className="text-[10px] font-bold uppercase tracking-tight">{emp.department}</span>
+                </div>
+
+                <div className="w-full mt-6 pt-6 border-t border-gray-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Assignments</span>
+                    <span className="text-[10px] font-bold text-blue-900">
+                      {Math.round(emp.tasks?.length ? (emp.tasks.filter(t => t.status === 'Completed').length / emp.tasks.length) * 100 : 0)}%
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-blue-900 transition-all duration-500" 
+                      style={{ width: `${emp.tasks?.length ? (emp.tasks.filter(t => t.status === 'Completed').length / emp.tasks.length) * 100 : 0}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {viewMode === 'compact' && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-in fade-in duration-300">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100">
+                  <th className="px-4 py-3 w-8">
+                    <input 
+                      type="checkbox" 
+                      className="w-3.5 h-3.5 rounded border-gray-300 text-blue-900 focus:ring-blue-900 accent-blue-900 cursor-pointer"
+                      checked={selectedIds.length > 0 && selectedIds.length === filteredEmployees.length}
+                      ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < filteredEmployees.length; }}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                  <th className="px-4 py-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Name</th>
+                  <th className="px-4 py-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Role</th>
+                  <th className="px-4 py-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Department</th>
+                  <th className="px-4 py-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+                  <th className="px-4 py-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filteredEmployees.map((emp) => (
+                  <tr 
+                    key={emp.id} 
+                    className={`hover:bg-blue-50/20 transition-colors group cursor-pointer ${selectedIds.includes(emp.id) ? 'bg-blue-50/30' : ''}`}
+                    onClick={() => setViewingEmployee(emp)}
+                  >
+                    <td className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
+                      <input 
+                        type="checkbox" 
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-blue-900 focus:ring-blue-900 accent-blue-900 cursor-pointer"
+                        checked={selectedIds.includes(emp.id)}
+                        onChange={() => toggleSelect(emp.id)}
+                      />
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <img src={emp.avatar} alt="" className="w-6 h-6 rounded-lg object-cover border border-gray-100 shadow-sm" />
+                        <span className="text-xs font-bold text-blue-900">{emp.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <span className="text-xs text-gray-600 font-medium">{emp.role}</span>
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <span className="text-[10px] text-blue-900/40 font-black uppercase tracking-tight">{emp.department}</span>
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <StatusBadge status={emp.status} />
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap text-right">
+                      <ActionMenu emp={emp} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Add Employee Slide-over */}
       {isAddingEmployee && (

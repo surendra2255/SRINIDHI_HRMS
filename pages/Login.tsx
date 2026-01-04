@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { User as UserIcon, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { User as UserIcon, Lock, AlertCircle, Eye, EyeOff, Snowflake, Ban } from 'lucide-react';
 import Logo from '../components/Logo';
 import { UserRole, User } from '../types';
 import { MOCK_EMPLOYEES } from '../constants';
@@ -23,10 +23,23 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
     // Simulate network delay
     setTimeout(() => {
-      // For demo purposes, we check against MOCK_EMPLOYEES with a common password
+      // Search for employee in mock database
       const employee = MOCK_EMPLOYEES.find(emp => emp.id === userId.trim());
       
       if (employee && password === 'password123') {
+        // Check account status
+        if (employee.status === 'Frozen') {
+          setError('ACCESS DENIED: Your account is temporarily frozen. Please contact the HR department.');
+          setIsLoading(false);
+          return;
+        }
+        
+        if (employee.status === 'Inactive') {
+          setError('ACCESS DENIED: This account has been deactivated and is no longer valid.');
+          setIsLoading(false);
+          return;
+        }
+
         const userRole: UserRole = employee.role.includes('HR') ? 'HR' : 'Employee';
         const user: User = {
           id: employee.id,
@@ -61,7 +74,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600 animate-in slide-in-from-top-2">
-            <AlertCircle size={18} className="flex-shrink-0" />
+            {error.includes('frozen') ? <Snowflake size={18} className="flex-shrink-0" /> : <Ban size={18} className="flex-shrink-0" />}
             <p className="text-xs font-bold text-left leading-tight">{error}</p>
           </div>
         )}
@@ -132,9 +145,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           
           <div className="mt-4 flex flex-col gap-1 items-center">
             <p className="text-[8px] text-gray-300 font-bold uppercase tracking-widest">Demo Credentials</p>
-            <div className="flex gap-4">
-              <code className="text-[9px] text-blue-300 bg-blue-50 px-2 py-1 rounded">ID: emp-diana / password123</code>
-              <code className="text-[9px] text-blue-300 bg-blue-50 px-2 py-1 rounded">ID: emp-alice / password123</code>
+            <div className="flex flex-wrap justify-center gap-2">
+              <code className="text-[9px] text-blue-300 bg-blue-50 px-2 py-1 rounded">emp-diana / password123</code>
+              <code className="text-[9px] text-blue-300 bg-blue-50 px-2 py-1 rounded">emp-alice / password123</code>
             </div>
           </div>
         </div>

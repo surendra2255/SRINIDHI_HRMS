@@ -32,10 +32,15 @@ export interface Employee {
   role: string;
   department: string;
   email: string;
-  status: 'Active' | 'On Leave' | 'Inactive';
+  status: 'Active' | 'On Leave' | 'Inactive' | 'Frozen';
   avatar: string;
   joinDate: string;
   tasks?: Task[];
+}
+
+export interface DocumentHistoryEntry {
+  status: 'Verified' | 'Pending';
+  timestamp: string;
 }
 
 export interface Document {
@@ -44,6 +49,7 @@ export interface Document {
   type: string;
   uploadDate: string;
   status: 'Verified' | 'Pending';
+  statusHistory?: DocumentHistoryEntry[];
 }
 
 export interface JobPosting {
