@@ -69,7 +69,7 @@ const Dashboard: React.FC = () => {
           <h2 className="text-lg font-bold mb-6 text-blue-900">Notices</h2>
           <div className="space-y-4">
             {[
-              { title: 'New Leave Policy', category: 'HR Policy', date: 'Oct 20', icon: <FileCheck className="text-blue-500" /> },
+              { title: 'New Attendance Policy', category: 'HR Policy', date: 'Oct 20', icon: <FileCheck className="text-blue-500" /> },
               { title: 'Annual Gala Night', category: 'Events', date: 'Dec 15', icon: <Award className="text-purple-500" /> },
               { title: 'Tax Submission Deadline', category: 'Finance', date: 'Mar 31', icon: <Calendar className="text-red-500" /> }
             ].map((notice, idx) => (

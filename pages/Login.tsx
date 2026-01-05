@@ -7,9 +7,10 @@ import { MOCK_EMPLOYEES } from '../constants';
 
 interface LoginProps {
   onLogin: (user: User) => void;
+  employees: any[]; // Accept current employees state from App
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin }) => {
+const Login: React.FC<LoginProps> = ({ onLogin, employees }) => {
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -23,10 +24,10 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
     // Simulate network delay
     setTimeout(() => {
-      // Search for employee in mock database
-      const employee = MOCK_EMPLOYEES.find(emp => emp.id === userId.trim());
+      // Search for employee in current application state
+      const employee = employees.find(emp => emp.id === userId.trim() || emp.employeeId === userId.trim());
       
-      if (employee && password === 'password123') {
+      if (employee && employee.password === password) {
         // Check account status
         if (employee.status === 'Frozen') {
           setError('ACCESS DENIED: Your account is temporarily frozen. Please contact the HR department.');
@@ -50,7 +51,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         };
         onLogin(user);
       } else {
-        setError('Invalid Personnel ID or Password. Please try again.');
+        setError('Invalid Personnel ID or Access Token. Please try again.');
         setIsLoading(false);
       }
     }, 800);
@@ -89,7 +90,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 required
                 autoComplete="username"
                 className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-transparent rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 focus:bg-white focus:border-blue-900/20 transition-all font-bold text-sm text-blue-900 placeholder:text-gray-300"
-                placeholder="e.g. emp-alice"
+                placeholder="e.g. SA-001 or emp-alice"
                 value={userId}
                 onChange={(e) => setUserId(e.target.value)}
               />

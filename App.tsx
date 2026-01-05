@@ -6,6 +6,8 @@ import Employees from './pages/Employees';
 import Recruitment from './pages/Recruitment';
 import Performance from './pages/Performance';
 import Documents from './pages/Documents';
+import Attendance from './pages/Attendance';
+import Security from './pages/Security';
 import Login from './pages/Login';
 import MyTasks from './pages/MyTasks';
 import { Bell, Search, LogOut, X, Clock } from 'lucide-react';
@@ -68,17 +70,26 @@ const App: React.FC = () => {
     switch (activeTab) {
       case 'dashboard': return <Dashboard />;
       case 'tasks': return currentEmployee ? <MyTasks employee={currentEmployee} onUpdateTask={handleUpdateTaskStatus} /> : <Dashboard />;
-      case 'employees': return user.role === 'HR' ? <Employees employees={employees} setEmployees={setEmployees} addNotification={addNotification} /> : <Dashboard />;
+      case 'profiles': return user.role === 'HR' ? <Employees employees={employees} setEmployees={setEmployees} addNotification={addNotification} /> : <Dashboard />;
       case 'recruitment': return user.role === 'HR' ? <Recruitment /> : <Dashboard />;
       case 'performance': return <Performance />;
-      case 'documents': return user.role === 'Employee' ? <Documents /> : <Dashboard />;
+      case 'attendance': return <Attendance user={user} />;
+      case 'documents': return (
+        <Documents 
+          user={user} 
+          allEmployees={employees} 
+          setEmployees={setEmployees} 
+          addNotification={addNotification}
+        />
+      );
+      case 'security': return <Security user={user} employees={employees} setEmployees={setEmployees} />;
       default: return <Dashboard />;
     }
   };
 
   // If user is not logged in, show the Login page
   if (!user) {
-    return <Login onLogin={handleLogin} />;
+    return <Login onLogin={handleLogin} employees={employees} />;
   }
 
   return (

@@ -28,14 +28,17 @@ export interface Notification {
 
 export interface Employee {
   id: string;
+  employeeId: string;
   name: string;
   role: string;
   department: string;
   email: string;
+  password?: string;
   status: 'Active' | 'On Leave' | 'Inactive' | 'Frozen';
   avatar: string;
   joinDate: string;
   tasks?: Task[];
+  documents?: Document[];
 }
 
 export interface DocumentHistoryEntry {
