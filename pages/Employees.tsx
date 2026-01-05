@@ -5,7 +5,7 @@ import {
   UserPlus, Building2, ShieldCheck, Download, Snowflake, Power, UserCheck,
   LayoutList, LayoutGrid, Rows3, ChevronDown, Fingerprint, FileText, Hash, UserCircle,
   Lock, Eye, EyeOff, ShieldAlert, KeyRound, AlertTriangle, Loader2, FolderInput,
-  Calendar, Clock, User as UserIcon, FileDown, Mail
+  Calendar, Clock, User as UserIcon, FileDown, Mail, Square, CheckSquare, AlertCircle, Info
 } from 'lucide-react';
 import { DEPARTMENTS } from '../constants';
 import { Employee, Task, Document } from '../types';
@@ -29,6 +29,8 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
   const [isAddingEmployee, setIsAddingEmployee] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [showBulkDeactivateConfirm, setShowBulkDeactivateConfirm] = useState(false);
   
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<'Low' | 'Medium' | 'High'>('Medium');
@@ -38,7 +40,6 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
   const [formError, setFormError] = useState<string | null>(null);
   const [adminResetPass, setAdminResetPass] = useState('');
   const [resetSuccess, setResetSuccess] = useState(false);
-  const [showInitialPass, setShowInitialPass] = useState(false);
 
   const [newEmp, setNewEmp] = useState({
     employeeId: '',
@@ -46,9 +47,15 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
     role: '',
     department: DEPARTMENTS[0],
     email: '',
-    password: '',
+    password: 'Password123!',
     status: 'Active' as const
   });
+
+  // Real-time validation states
+  const idRegex = /^SA-\d{3}$/;
+  const isIdFormatValid = idRegex.test(newEmp.employeeId);
+  const isIdUnique = !employees.some(emp => emp.employeeId.toUpperCase() === newEmp.employeeId.toUpperCase());
+  const canSubmit = isIdFormatValid && isIdUnique && newEmp.name && newEmp.email && newEmp.role;
 
   useEffect(() => {
     const handleClickOutside = () => setMenuOpenId(null);
@@ -79,6 +86,32 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
 
     return matchesSearch && matchesId && matchesStatus && matchesDept && matchesTasks;
   });
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filteredEmployees.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredEmployees.map(e => e.id));
+    }
+  };
+
+  const toggleSelect = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkDeactivate = () => {
+    setEmployees(prev => prev.map(emp => 
+      selectedIds.includes(emp.id) ? { ...emp, status: 'Inactive' } : emp
+    ));
+    selectedIds.forEach(id => {
+      addNotification(id, "Account Status Updated", "Your organizational access has been set to Inactive by HR.");
+    });
+    setSelectedIds([]);
+    setShowBulkDeactivateConfirm(false);
+  };
 
   const handleExportCSV = () => {
     const headers = ['Employee ID', 'Name', 'Role', 'Department', 'Status'];
@@ -117,16 +150,17 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
   const handleAddEmployee = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
-    const idRegex = /^SA-\d{3}$/;
-    if (!idRegex.test(newEmp.employeeId)) {
-      setFormError("Employee ID must follow the format 'SA-XXX'.");
+    
+    if (!isIdFormatValid) {
+      setFormError("Format Mismatch: Employee ID must strictly follow the 'SA-XXX' pattern.");
       return;
     }
-    const isDuplicate = employees.some(emp => emp.employeeId.toUpperCase() === newEmp.employeeId.toUpperCase());
-    if (isDuplicate) {
-      setFormError(`Conflict: Employee ID '${newEmp.employeeId}' is already assigned.`);
+    
+    if (!isIdUnique) {
+      setFormError(`Registry Conflict: The identifier '${newEmp.employeeId}' is already permanently assigned.`);
       return;
     }
+
     const employee: Employee = {
       id: `emp-${Date.now()}`,
       ...newEmp,
@@ -135,9 +169,10 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
       tasks: [],
       documents: []
     };
+    
     setEmployees([employee, ...employees]);
     setIsAddingEmployee(false);
-    setNewEmp({ employeeId: '', name: '', role: '', department: DEPARTMENTS[0], email: '', password: '', status: 'Active' });
+    setNewEmp({ employeeId: '', name: '', role: '', department: DEPARTMENTS[0], email: '', password: 'Password123!', status: 'Active' });
   };
 
   const handleAdminResetPassword = () => {
@@ -166,20 +201,6 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
     setViewingEmployee(prev => prev ? { ...prev, tasks: [...(prev.tasks || []), newTask] } : null);
     addNotification(viewingEmployee.id, "New Assignment", `HR has assigned you a new task: ${newTaskTitle}`);
     setNewTaskTitle('');
-  };
-
-  const handleUpdateTaskStatus = (taskId: string, newStatus: Task['status']) => {
-    if (!viewingEmployee) return;
-    setEmployees(prev => prev.map(emp => {
-      if (emp.id === viewingEmployee.id) {
-        return {
-          ...emp,
-          tasks: (emp.tasks || []).map(t => t.id === taskId ? { ...t, status: newStatus } : t)
-        };
-      }
-      return emp;
-    }));
-    setViewingEmployee(prev => prev ? { ...prev, tasks: (prev.tasks || []).map(t => t.id === taskId ? { ...t, status: newStatus } : t) } : null);
   };
 
   const StatusBadge = ({ status }: { status: Employee['status'] }) => (
@@ -221,6 +242,11 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
       <table className="w-full text-left">
         <thead>
           <tr className="bg-gray-50/50 border-b border-gray-100">
+            <th className="px-6 py-5 w-10">
+              <button onClick={toggleSelectAll} className={`w-5 h-5 rounded flex items-center justify-center transition-all ${selectedIds.length === filteredEmployees.length ? 'bg-blue-900 text-white' : 'bg-white border border-gray-300 text-transparent'}`}>
+                {selectedIds.length === filteredEmployees.length ? <CheckSquare size={14} /> : <Square size={14} />}
+              </button>
+            </th>
             <th className="px-6 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Employee ID</th>
             <th className="px-6 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Profile</th>
             <th className="px-6 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Department</th>
@@ -229,23 +255,35 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
-          {filteredEmployees.map(emp => (
-            <tr key={emp.id} onClick={() => setViewingEmployee(emp)} className="hover:bg-blue-50/30 transition-all cursor-pointer">
-              <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-gray-400">{emp.employeeId}</td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="flex items-center gap-4">
-                  <img src={emp.avatar} alt="" className="w-10 h-10 rounded-2xl object-cover" />
-                  <div>
-                    <p className="text-sm font-bold text-blue-900">{emp.name}</p>
-                    <p className="text-[11px] text-gray-400 font-bold uppercase">{emp.role}</p>
+          {filteredEmployees.map(emp => {
+            const isSelected = selectedIds.includes(emp.id);
+            return (
+              <tr 
+                key={emp.id} 
+                onClick={() => setViewingEmployee(emp)} 
+                className={`hover:bg-blue-50/30 transition-all cursor-pointer ${isSelected ? 'bg-blue-50/50' : ''}`}
+              >
+                <td className="px-6 py-4">
+                  <button onClick={(e) => toggleSelect(emp.id, e)} className={`w-5 h-5 rounded flex items-center justify-center transition-all ${isSelected ? 'bg-blue-900 text-white shadow-sm' : 'bg-white border border-gray-200 text-transparent'}`}>
+                    {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+                  </button>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-gray-400">{emp.employeeId}</td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex items-center gap-4">
+                    <img src={emp.avatar} alt="" className="w-10 h-10 rounded-2xl object-cover" />
+                    <div>
+                      <p className="text-sm font-bold text-blue-900">{emp.name}</p>
+                      <p className="text-[11px] text-gray-400 font-bold uppercase">{emp.role}</p>
+                    </div>
                   </div>
-                </div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-[11px] font-bold text-gray-500 uppercase">{emp.department}</td>
-              <td className="px-6 py-4 whitespace-nowrap"><StatusBadge status={emp.status} /></td>
-              <td className="px-6 py-4 text-right"><ActionMenu emp={emp} /></td>
-            </tr>
-          ))}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-[11px] font-bold text-gray-500 uppercase">{emp.department}</td>
+                <td className="px-6 py-4 whitespace-nowrap"><StatusBadge status={emp.status} /></td>
+                <td className="px-6 py-4 text-right"><ActionMenu emp={emp} /></td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -253,60 +291,80 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
 
   const renderGridView = () => (
     <div key="grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in fade-in zoom-in-95 duration-500">
-      {filteredEmployees.map(emp => (
-        <div 
-          key={emp.id} 
-          onClick={() => setViewingEmployee(emp)}
-          className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm hover:border-blue-200 hover:shadow-lg transition-all cursor-pointer relative group"
-        >
-          <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-            <ActionMenu emp={emp} />
-          </div>
-          <div className="flex flex-col items-center text-center">
-            <img src={emp.avatar} alt="" className="w-20 h-20 rounded-[2rem] object-cover mb-4 shadow-md border-4 border-white" />
-            <h3 className="text-sm font-bold text-blue-900 mb-1">{emp.name}</h3>
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">{emp.role}</p>
-            <div className="flex flex-col gap-2 w-full">
-              <div className="flex items-center justify-between bg-gray-50 p-2 rounded-xl">
-                <span className="text-[9px] font-black text-gray-400 uppercase">Dept</span>
-                <span className="text-[10px] font-bold text-blue-900">{emp.department}</span>
+      {filteredEmployees.map(emp => {
+        const isSelected = selectedIds.includes(emp.id);
+        return (
+          <div 
+            key={emp.id} 
+            onClick={() => setViewingEmployee(emp)}
+            className={`bg-white p-6 rounded-[2.5rem] border transition-all cursor-pointer relative group ${isSelected ? 'border-blue-900 bg-blue-50/20 ring-4 ring-blue-900/5 shadow-md' : 'border-gray-100 shadow-sm hover:border-blue-200 hover:shadow-lg'}`}
+          >
+            <div className="absolute top-4 left-4 z-10">
+              <button 
+                onClick={(e) => toggleSelect(emp.id, e)} 
+                className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${isSelected ? 'bg-blue-900 text-white shadow-sm' : 'bg-white/80 border border-gray-200 text-transparent hover:border-blue-400 backdrop-blur-sm opacity-0 group-hover:opacity-100'}`}
+              >
+                {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+              </button>
+            </div>
+            <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+              <ActionMenu emp={emp} />
+            </div>
+            <div className="flex flex-col items-center text-center">
+              <img src={emp.avatar} alt="" className="w-20 h-20 rounded-[2rem] object-cover mb-4 shadow-md border-4 border-white" />
+              <h3 className="text-sm font-bold text-blue-900 mb-1">{emp.name}</h3>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">{emp.role}</p>
+              <div className="flex flex-col gap-2 w-full">
+                <div className="flex items-center justify-between bg-gray-50 p-2 rounded-xl">
+                  <span className="text-[9px] font-black text-gray-400 uppercase">Dept</span>
+                  <span className="text-[10px] font-bold text-blue-900">{emp.department}</span>
+                </div>
+                <div className="flex items-center justify-between bg-gray-50 p-2 rounded-xl">
+                  <span className="text-[9px] font-black text-gray-400 uppercase">ID</span>
+                  <span className="text-[10px] font-bold text-blue-900">{emp.employeeId}</span>
+                </div>
               </div>
-              <div className="flex items-center justify-between bg-gray-50 p-2 rounded-xl">
-                <span className="text-[9px] font-black text-gray-400 uppercase">ID</span>
-                <span className="text-[10px] font-bold text-blue-900">{emp.employeeId}</span>
+              <div className="mt-4">
+                <StatusBadge status={emp.status} />
               </div>
             </div>
-            <div className="mt-4">
-              <StatusBadge status={emp.status} />
-            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 
   const renderCompactView = () => (
     <div key="compact" className="space-y-2 animate-in fade-in zoom-in-95 duration-500">
-      {filteredEmployees.map(emp => (
-        <div 
-          key={emp.id} 
-          onClick={() => setViewingEmployee(emp)}
-          className="bg-white px-6 py-3 rounded-2xl border border-gray-100 shadow-sm hover:bg-blue-50/30 transition-all cursor-pointer flex items-center justify-between"
-        >
-          <div className="flex items-center gap-4 flex-1">
-            <span className="text-[10px] font-black text-gray-300 w-16">{emp.employeeId}</span>
-            <div className="flex items-center gap-3">
-              <img src={emp.avatar} alt="" className="w-8 h-8 rounded-xl object-cover" />
-              <p className="text-xs font-bold text-blue-900">{emp.name}</p>
+      {filteredEmployees.map(emp => {
+        const isSelected = selectedIds.includes(emp.id);
+        return (
+          <div 
+            key={emp.id} 
+            onClick={() => setViewingEmployee(emp)}
+            className={`px-6 py-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${isSelected ? 'bg-blue-50 border-blue-900 shadow-sm' : 'bg-white border-gray-100 shadow-sm hover:bg-blue-50/30'}`}
+          >
+            <div className="flex items-center gap-4 flex-1">
+              <button 
+                onClick={(e) => toggleSelect(emp.id, e)} 
+                className={`w-5 h-5 rounded flex items-center justify-center transition-all ${isSelected ? 'bg-blue-900 text-white shadow-sm' : 'bg-gray-50 border border-gray-200 text-transparent'}`}
+              >
+                {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+              </button>
+              <span className="text-[10px] font-black text-gray-300 w-16">{emp.employeeId}</span>
+              <div className="flex items-center gap-3">
+                <img src={emp.avatar} alt="" className="w-8 h-8 rounded-xl object-cover" />
+                <p className="text-xs font-bold text-blue-900">{emp.name}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-8">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:block">{emp.department}</span>
+              <StatusBadge status={emp.status} />
+              <ActionMenu emp={emp} />
             </div>
           </div>
-          <div className="flex items-center gap-8">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:block">{emp.department}</span>
-            <StatusBadge status={emp.status} />
-            <ActionMenu emp={emp} />
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 
@@ -378,6 +436,71 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
         )}
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 w-full max-w-lg px-4 z-[100] animate-in slide-in-from-bottom-10 duration-500">
+          <div className="bg-blue-900 text-white p-4 rounded-[2.5rem] shadow-2xl flex items-center justify-between border border-white/10 backdrop-blur-md">
+            <div className="flex items-center gap-4 ml-4">
+              <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center">
+                <Hash size={20} />
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest">{selectedIds.length} Profiles Selected</p>
+                <p className="text-[10px] font-bold text-white/60 uppercase">Bulk Registry Modification</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setShowBulkDeactivateConfirm(true)}
+                className="px-6 py-3 bg-red-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 transition-all active:scale-95 shadow-xl flex items-center gap-2"
+              >
+                <Power size={14} /> Deactivate
+              </button>
+              <button 
+                onClick={() => setSelectedIds([])}
+                className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-2xl transition-all"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modals */}
+      {showBulkDeactivateConfirm && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-blue-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setShowBulkDeactivateConfirm(false)}></div>
+          <div className="relative bg-white rounded-[3rem] p-10 max-md w-full shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-400">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-24 h-24 bg-red-50 text-red-600 rounded-[2.5rem] flex items-center justify-center mb-8 shadow-inner">
+                <AlertCircle size={48} />
+              </div>
+              <h2 className="text-3xl font-black text-blue-900 mb-2 uppercase tracking-tighter leading-none">Security Alert</h2>
+              <p className="text-sm text-gray-500 mb-10 font-bold uppercase tracking-widest leading-relaxed">
+                You are about to deactivate <span className="text-blue-900 font-black">{selectedIds.length} personnel profiles</span>. 
+                These accounts will lose all access to the Srinidhi Associates portal immediately.
+              </p>
+              <div className="flex flex-col w-full gap-3">
+                <button 
+                  onClick={handleBulkDeactivate}
+                  className="w-full py-5 bg-red-600 text-white rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl hover:bg-red-700 active:scale-95"
+                >
+                  Confirm Deactivation
+                </button>
+                <button 
+                  onClick={() => setShowBulkDeactivateConfirm(false)}
+                  className="w-full py-5 bg-gray-50 text-gray-400 rounded-2xl font-black uppercase tracking-widest hover:bg-gray-100 transition-all active:scale-95"
+                >
+                  Cancel Action
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Profile Modal */}
       {isAddingEmployee && (
         <div className="fixed inset-0 z-[150] overflow-hidden">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsAddingEmployee(false)} />
@@ -399,36 +522,66 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
               <div className="space-y-6">
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Employee ID</label>
-                  <input 
-                    required 
-                    placeholder="e.g. SA-005" 
-                    className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm" 
-                    value={newEmp.employeeId} 
-                    onChange={e => setNewEmp({...newEmp, employeeId: e.target.value.toUpperCase()})} 
-                  />
+                  <div className="relative group mt-1">
+                    <Fingerprint className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${!isIdFormatValid && newEmp.employeeId ? 'text-red-400' : 'text-gray-300 group-focus-within:text-blue-900'}`} size={18} />
+                    <input 
+                      required 
+                      placeholder="e.g. SA-005" 
+                      className={`w-full pl-12 pr-5 py-4 bg-gray-50 border rounded-2xl outline-none font-bold text-sm transition-all ${
+                        !newEmp.employeeId ? 'border-gray-100' : 
+                        (!isIdFormatValid || !isIdUnique) ? 'border-red-200 focus:ring-red-500/5 focus:bg-white' : 
+                        'border-green-200 focus:ring-green-500/5 focus:bg-white'
+                      }`} 
+                      value={newEmp.employeeId} 
+                      onChange={e => setNewEmp({...newEmp, employeeId: e.target.value.toUpperCase()})} 
+                    />
+                  </div>
+                  <div className="mt-2 flex items-start gap-2 px-1">
+                    {(!isIdFormatValid && newEmp.employeeId) ? (
+                      <div className="flex items-center gap-1.5 text-[9px] font-bold text-red-500 uppercase tracking-tight">
+                        <AlertCircle size={12} /> Format mismatch (SA-XXX required)
+                      </div>
+                    ) : (!isIdUnique && newEmp.employeeId) ? (
+                      <div className="flex items-center gap-1.5 text-[9px] font-bold text-red-500 uppercase tracking-tight">
+                        <ShieldAlert size={12} /> Registry conflict: ID already assigned
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-[9px] font-bold text-gray-400 uppercase tracking-tight">
+                        <Info size={12} /> Pattern: SA- followed by 3 digits
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Full Legal Name</label>
-                  <input required className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm" value={newEmp.name} onChange={e => setNewEmp({...newEmp, name: e.target.value})} />
+                  <input required className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 focus:ring-blue-500/5 focus:bg-white transition-all" value={newEmp.name} onChange={e => setNewEmp({...newEmp, name: e.target.value})} />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Professional Email</label>
-                  <input type="email" required className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm" value={newEmp.email} onChange={e => setNewEmp({...newEmp, email: e.target.value})} />
+                  <input type="email" required className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 focus:ring-blue-500/5 focus:bg-white transition-all" value={newEmp.email} onChange={e => setNewEmp({...newEmp, email: e.target.value})} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Position</label>
-                    <input required className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm" value={newEmp.role} onChange={e => setNewEmp({...newEmp, role: e.target.value})} />
+                    <input required className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 focus:ring-blue-500/5 focus:bg-white transition-all" value={newEmp.role} onChange={e => setNewEmp({...newEmp, role: e.target.value})} />
                   </div>
                   <div>
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Department</label>
-                    <select className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm" value={newEmp.department} onChange={e => setNewEmp({...newEmp, department: e.target.value})}>
+                    <select className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 focus:ring-blue-500/5 focus:bg-white transition-all" value={newEmp.department} onChange={e => setNewEmp({...newEmp, department: e.target.value})}>
                       {DEPARTMENTS.map(d => <option key={d}>{d}</option>)}
                     </select>
                   </div>
                 </div>
               </div>
-              <button type="submit" className="w-full py-5 bg-blue-900 text-white rounded-[2rem] font-bold text-sm uppercase tracking-widest shadow-xl shadow-blue-900/20 active:scale-95 transition-all">Initialize Profile</button>
+              <div className="pt-4">
+                <button 
+                  type="submit" 
+                  disabled={!canSubmit}
+                  className="w-full py-5 bg-blue-900 text-white rounded-[2rem] font-bold text-sm uppercase tracking-widest shadow-xl shadow-blue-900/20 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed"
+                >
+                  Initialize Profile
+                </button>
+              </div>
             </form>
           </div>
         </div>
