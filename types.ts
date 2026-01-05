@@ -44,6 +44,7 @@ export interface Employee {
 export interface DocumentHistoryEntry {
   status: 'Verified' | 'Pending';
   timestamp: string;
+  verifiedBy?: string;
 }
 
 export interface Document {

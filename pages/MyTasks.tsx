@@ -98,6 +98,7 @@ const MyTasks: React.FC<MyTasksProps> = ({ employee, onUpdateTask }) => {
             const isCompleting = completingTaskIds.includes(task.id);
             const isSelected = selectedIds.includes(task.id);
             const isCompleted = task.status === 'Completed';
+            const isInProgress = task.status === 'In Progress';
             
             return (
               <div 
@@ -134,9 +135,9 @@ const MyTasks: React.FC<MyTasksProps> = ({ employee, onUpdateTask }) => {
 
                   <div className="flex items-start gap-4 flex-1 min-w-0">
                     <div className={`p-4 rounded-2xl transition-all duration-500 ${
-                      isCompleted || isCompleting ? 'bg-green-50 text-green-600' :
-                      task.status === 'In Progress' ? 'bg-blue-900 text-white' :
-                      'bg-gray-50 text-gray-400'
+                      isCompleted || isCompleting ? 'bg-green-100 text-green-700 shadow-sm' :
+                      isInProgress ? 'bg-blue-900 text-white shadow-lg' :
+                      'bg-gray-100 text-gray-400'
                     }`}>
                       {isCompleted || isCompleting ? (
                         <CheckCircle size={24} className={isCompleting ? 'animate-bounce' : ''} />
@@ -161,10 +162,10 @@ const MyTasks: React.FC<MyTasksProps> = ({ employee, onUpdateTask }) => {
                         }`}>
                           {task.priority} Priority
                         </span>
-                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-[0.2em] border transition-colors duration-500 ${
-                          isCompleted || isCompleting ? 'bg-green-50 text-green-700 border-green-100' :
-                          task.status === 'In Progress' ? 'bg-blue-50 text-blue-900 border-blue-100' :
-                          'bg-gray-100 text-gray-400 border-gray-200'
+                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-[0.2em] border shadow-sm transition-all duration-500 ${
+                          isCompleted || isCompleting ? 'bg-green-500 text-white border-green-600' :
+                          isInProgress ? 'bg-blue-900 text-white border-blue-950' :
+                          'bg-slate-100 text-slate-600 border-slate-200'
                         }`}>
                           {isCompleting ? 'Finalizing...' : task.status}
                         </span>

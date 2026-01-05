@@ -19,12 +19,13 @@ import {
   Search,
   UserCircle,
   Hash,
-  Filter
+  Filter,
+  User
 } from 'lucide-react';
-import { Document, Employee, User } from '../types';
+import { Document, Employee, User as UserType } from '../types';
 
 interface DocumentsProps {
-  user: User;
+  user: UserType;
   allEmployees: Employee[];
   setEmployees: React.Dispatch<React.SetStateAction<Employee[]>>;
   addNotification: (userId: string, title: string, message: string) => void;
@@ -200,7 +201,7 @@ const Documents: React.FC<DocumentsProps> = ({ user, allEmployees, setEmployees,
               return {
                 ...d,
                 status: 'Verified' as const,
-                statusHistory: [...history, { status: 'Verified' as const, timestamp }]
+                statusHistory: [...history, { status: 'Verified' as const, timestamp, verifiedBy: user.name }]
               };
             }
             return d;
@@ -424,6 +425,11 @@ const Documents: React.FC<DocumentsProps> = ({ user, allEmployees, setEmployees,
                             </div>
                             <div className="flex-1">
                               <p className="text-xs font-bold text-blue-900">Status: <span className={entry.status === 'Verified' ? 'text-green-600' : 'text-yellow-600'}>{entry.status}</span></p>
+                              {entry.verifiedBy && (
+                                <p className="text-[10px] font-bold text-gray-500 mt-0.5">
+                                  Verified by: <span className="text-blue-900">{entry.verifiedBy}</span>
+                                </p>
+                              )}
                               <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tight flex items-center gap-1 mt-0.5"><Clock size={10} /> {entry.timestamp}</p>
                             </div>
                           </div>
@@ -442,7 +448,7 @@ const Documents: React.FC<DocumentsProps> = ({ user, allEmployees, setEmployees,
       {docToDelete && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-blue-900/20 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setDocToDelete(null)}></div>
-          <div className="relative bg-white rounded-[3rem] p-10 max-w-sm w-full shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-300">
+          <div className="relative bg-white rounded-[3rem] p-10 max-sm w-full shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-300">
             <div className="flex flex-col items-center text-center">
               <div className="w-20 h-20 bg-red-50 text-red-600 rounded-[2rem] flex items-center justify-center mb-8"><TriangleAlert size={40} /></div>
               <h2 className="text-2xl font-bold text-blue-900 mb-2 uppercase tracking-tighter">Confirm Deletion</h2>
