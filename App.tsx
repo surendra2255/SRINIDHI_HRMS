@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import Employees from './pages/Employees';
@@ -10,7 +10,7 @@ import Attendance from './pages/Attendance';
 import Security from './pages/Security';
 import Login from './pages/Login';
 import MyTasks from './pages/MyTasks';
-import { Bell, Search, LogOut, X, Clock } from 'lucide-react';
+import { Bell, Search, LogOut, X, Clock, ShieldAlert } from 'lucide-react';
 import Logo from './components/Logo';
 import { User, Employee, Notification, Task } from './types';
 import { MOCK_EMPLOYEES } from './constants';
@@ -21,6 +21,15 @@ const App: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>(MOCK_EMPLOYEES);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+
+  const currentEmployee = employees.find(e => e.id === user?.id);
+
+  // Enforcement logic: If password change is required, lock the user to the security tab
+  useEffect(() => {
+    if (currentEmployee?.mustChangePassword && activeTab !== 'security') {
+      setActiveTab('security');
+    }
+  }, [currentEmployee?.mustChangePassword, activeTab]);
 
   const handleLogin = (loggedInUser: User) => {
     setUser(loggedInUser);
@@ -51,8 +60,6 @@ const App: React.FC = () => {
   const userNotifications = notifications.filter(n => n.userId === user?.id || (user?.role === 'HR'));
   const unreadCount = userNotifications.filter(n => !n.isRead).length;
 
-  const currentEmployee = employees.find(e => e.id === user?.id);
-
   const handleUpdateTaskStatus = (taskId: string, status: Task['status']) => {
     setEmployees(prev => prev.map(emp => {
       if (emp.id === user?.id) {
@@ -67,6 +74,12 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     if (!user) return null;
+    
+    // If user must change password, restrict access to other pages
+    if (currentEmployee?.mustChangePassword && activeTab !== 'security') {
+      return <Security user={user} employees={employees} setEmployees={setEmployees} addNotification={addNotification} />;
+    }
+
     switch (activeTab) {
       case 'dashboard': return <Dashboard />;
       case 'tasks': return currentEmployee ? <MyTasks employee={currentEmployee} onUpdateTask={handleUpdateTaskStatus} /> : <Dashboard />;
@@ -82,7 +95,7 @@ const App: React.FC = () => {
           addNotification={addNotification}
         />
       );
-      case 'security': return <Security user={user} employees={employees} setEmployees={setEmployees} />;
+      case 'security': return <Security user={user} employees={employees} setEmployees={setEmployees} addNotification={addNotification} />;
       default: return <Dashboard />;
     }
   };
@@ -94,9 +107,24 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} user={user} />
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        user={user} 
+        disabled={!!currentEmployee?.mustChangePassword}
+      />
       
       <main className="flex-1 md:ml-64 p-4 md:p-8">
+        {currentEmployee?.mustChangePassword && (
+          <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-2xl flex items-center justify-between animate-in slide-in-from-top-4 duration-500">
+            <div className="flex items-center gap-4 text-orange-800">
+              <ShieldAlert size={20} className="shrink-0" />
+              <p className="text-sm font-bold uppercase tracking-tight">Security Action Required: Mandatory access token update mandated by HR administration.</p>
+            </div>
+            <div className="px-3 py-1 bg-orange-100 text-orange-900 text-[10px] font-black rounded-lg uppercase">Restricted Mode</div>
+          </div>
+        )}
+
         <nav className="flex items-center justify-between mb-8 sticky top-0 bg-gray-50/80 backdrop-blur-md z-10 py-4">
           <div className="md:hidden flex items-center gap-2">
              <Logo className="w-8 h-8" />
@@ -109,6 +137,7 @@ const App: React.FC = () => {
               type="text" 
               placeholder="Quick search records..." 
               className="bg-transparent border-none outline-none text-sm ml-2 w-full font-medium"
+              disabled={!!currentEmployee?.mustChangePassword}
             />
           </div>
 
@@ -119,7 +148,8 @@ const App: React.FC = () => {
                   setShowNotifications(!showNotifications);
                   if (!showNotifications) markAllAsRead();
                 }}
-                className="p-2 text-gray-400 hover:bg-white hover:text-blue-900 rounded-xl transition-all relative"
+                disabled={!!currentEmployee?.mustChangePassword}
+                className="p-2 text-gray-400 hover:bg-white hover:text-blue-900 rounded-xl transition-all relative disabled:opacity-30"
               >
                 <Bell size={20} />
                 {unreadCount > 0 && (

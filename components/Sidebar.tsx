@@ -8,9 +8,10 @@ interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   user: User;
+  disabled?: boolean;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user, disabled = false }) => {
   const filteredNavItems = NAV_ITEMS.filter(item => item.roles.includes(user.role));
 
   return (
@@ -26,21 +27,28 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user }) => {
       </div>
       
       <nav className="flex-1 py-6 px-4 space-y-1 overflow-y-auto no-scrollbar">
-        {filteredNavItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setActiveTab(item.id)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-              activeTab === item.id 
-                ? 'bg-blue-50 text-blue-900 font-bold' 
-                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-            }`}
-          >
-            {/* Fix: casting the icon to ReactElement<any> ensures the compiler allows generic props like 'size' */}
-            {React.cloneElement(item.icon as React.ReactElement<any>, { size: 20 })}
-            <span>{item.label}</span>
-          </button>
-        ))}
+        {filteredNavItems.map((item) => {
+          const isActive = activeTab === item.id;
+          const isItemDisabled = disabled && item.id !== 'security';
+          
+          return (
+            <button
+              key={item.id}
+              disabled={isItemDisabled}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                isActive 
+                  ? 'bg-blue-50 text-blue-900 font-bold shadow-sm' 
+                  : isItemDisabled
+                    ? 'opacity-30 cursor-not-allowed grayscale text-gray-400'
+                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+              }`}
+            >
+              {React.cloneElement(item.icon as React.ReactElement<any>, { size: 20 })}
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
       </nav>
 
       <div className="p-4 border-t border-gray-100">

@@ -34,6 +34,7 @@ export interface Employee {
   department: string;
   email: string;
   password?: string;
+  mustChangePassword?: boolean;
   status: 'Active' | 'On Leave' | 'Inactive' | 'Frozen';
   avatar: string;
   joinDate: string;
@@ -54,6 +55,7 @@ export interface Document {
   uploadDate: string;
   status: 'Verified' | 'Pending';
   statusHistory?: DocumentHistoryEntry[];
+  verifiedBy?: string;
 }
 
 export interface JobPosting {
