@@ -244,6 +244,35 @@ const Documents: React.FC<DocumentsProps> = ({ user, allEmployees, setEmployees,
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadRelievingLetter = (doc: Document & { ownerName: string }) => {
+    const content = `
+      SRINIDHI ASSOCIATES - OFFICIAL RELIEVING LETTER
+      ----------------------------------------------
+      Date: ${doc.uploadDate}
+      Registry UID: ${doc.id}
+      
+      To Whom It May Concern,
+      
+      This is to certify that ${doc.ownerName} was employed with Srinidhi Associates. 
+      Their resignation has been accepted and they have been relieved of their duties.
+      
+      We wish them success in their future endeavors.
+      
+      Digitally Signed: 
+      HR Master Registry - Srinidhi Associates
+      Verification Token: ${doc.id}
+    `;
+    const blob = new Blob([content], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Relieving_Letter_${doc.ownerName.replace(/\s+/g, '_')}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const handleGeneratePayslip = (e: React.FormEvent) => {
     e.preventDefault();
     if (!payslipFormData.employeeId) return;
@@ -589,10 +618,13 @@ const Documents: React.FC<DocumentsProps> = ({ user, allEmployees, setEmployees,
                           <History size={12} /> Audit Trail
                         </button>
                         <div className="flex gap-1">
+                          {doc.type === 'Relieving Letter' && (
+                            <button onClick={() => handleDownloadRelievingLetter(doc as any)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="Download PDF"><Download size={18}/></button>
+                          )}
                           {isHR && doc.status !== 'Verified' && (
                             <button onClick={() => verifyDoc(doc.id, doc.ownerId)} className="p-2 text-green-500 hover:bg-green-50 rounded-lg transition-all" title="Verify Entry"><ShieldCheck size={18}/></button>
                           )}
-                          {doc.ownerId === user.id && (
+                          {doc.ownerId === user.id && doc.type !== 'Relieving Letter' && (
                             <button onClick={() => startEditing(doc)} className="p-2 text-gray-300 hover:text-blue-900 transition-all" title="Manage Record"><Edit2 size={16} /></button>
                           )}
                           {(isHR || doc.ownerId === user.id) && (
@@ -698,7 +730,6 @@ const Documents: React.FC<DocumentsProps> = ({ user, allEmployees, setEmployees,
         </div>
       )}
 
-      {/* HR Payslip Release Modal */}
       {isGeneratingPayslip && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setIsGeneratingPayslip(false)}></div>

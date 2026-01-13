@@ -125,6 +125,7 @@ const App: React.FC = () => {
           setResignationRequests={setResignationRequests}
           addNotification={addNotification}
           employees={employees}
+          setEmployees={setEmployees}
         />
       );
       case 'documents': return (

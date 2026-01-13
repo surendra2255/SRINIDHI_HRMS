@@ -18,7 +18,7 @@ import {
   History,
   MessageSquare
 } from 'lucide-react';
-import { User, ResignationRequest, Employee, ResignationStatus } from '../types';
+import { User, ResignationRequest, Employee, ResignationStatus, Document } from '../types';
 
 interface ExitManagementProps {
   user: User;
@@ -26,6 +26,7 @@ interface ExitManagementProps {
   setResignationRequests: React.Dispatch<React.SetStateAction<ResignationRequest[]>>;
   addNotification: (userId: string, title: string, message: string) => void;
   employees: Employee[];
+  setEmployees: React.Dispatch<React.SetStateAction<Employee[]>>;
 }
 
 const ExitManagement: React.FC<ExitManagementProps> = ({ 
@@ -33,7 +34,8 @@ const ExitManagement: React.FC<ExitManagementProps> = ({
   resignationRequests, 
   setResignationRequests, 
   addNotification, 
-  employees 
+  employees,
+  setEmployees
 }) => {
   const isHR = user.role === 'HR';
   const [isApplying, setIsApplying] = useState(false);
@@ -47,7 +49,6 @@ const ExitManagement: React.FC<ExitManagementProps> = ({
     [resignationRequests, user.id]
   );
 
-  // For HR or Supervisors to see all relevant requests
   const allRequests = useMemo(() => resignationRequests, [resignationRequests]);
 
   const handleResign = (e: React.FormEvent) => {
@@ -67,12 +68,10 @@ const ExitManagement: React.FC<ExitManagementProps> = ({
     setIsApplying(false);
     setFormData({ reason: '', lastWorkingDate: '' });
 
-    // Notify HR team
     employees.filter(e => e.role === 'HR').forEach(hr => {
       addNotification(hr.id, "Resignation Alert", `${user.name} has submitted a resignation request.`);
     });
 
-    // Notify Supervisor (Alice acts as supervisor in this mock)
     if (user.id !== 'emp-alice') {
       addNotification('emp-alice', "Direct Report Resignation", `${user.name} has applied for resignation.`);
     }
@@ -83,6 +82,35 @@ const ExitManagement: React.FC<ExitManagementProps> = ({
       if (req.id === requestId) {
         const updatedReq = { ...req, status: action };
         addNotification(req.employeeId, `Resignation ${action}`, `Your resignation request has been ${action.toLowerCase()} by HR.`);
+
+        // AUTOMATIC RELIEVING LETTER GENERATION
+        if (action === 'Accepted') {
+          const now = new Date();
+          const timestamp = now.toLocaleString();
+          
+          const newRelievingLetter: Document = {
+            id: `rl-${Date.now()}`,
+            name: `Relieving Letter - ${req.employeeName}`,
+            type: 'Relieving Letter',
+            uploadDate: now.toISOString().split('T')[0],
+            status: 'Verified',
+            verifiedBy: `HR Master [${user.name}]`,
+            statusHistory: [{ 
+              status: 'Verified', 
+              timestamp,
+              verifiedBy: `System Policy Auto-Trigger`
+            }]
+          };
+
+          setEmployees(prevEmps => prevEmps.map(emp => 
+            emp.id === req.employeeId 
+              ? { ...emp, documents: [newRelievingLetter, ...(emp.documents || [])], status: 'Inactive' } 
+              : emp
+          ));
+          
+          addNotification(req.employeeId, "Exit Document Issued", "Your official Relieving Letter has been automatically generated and is available in your Registry.");
+        }
+
         return updatedReq;
       }
       return req;
@@ -107,9 +135,7 @@ const ExitManagement: React.FC<ExitManagementProps> = ({
       </header>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        {/* Main Workspace */}
         <div className="xl:col-span-2 space-y-8">
-          {/* Employee's Own Resignation Status */}
           {!isHR && myResignation && (
             <section className="bg-white p-8 rounded-[3rem] border border-red-100 shadow-sm relative overflow-hidden">
               <div className="absolute top-0 right-0 p-8 text-red-500/5 pointer-events-none">
@@ -147,11 +173,20 @@ const ExitManagement: React.FC<ExitManagementProps> = ({
                     </div>
                   </div>
                 </div>
+                
+                {myResignation.status === 'Accepted' && (
+                  <div className="mt-8 p-6 bg-green-50 border border-green-100 rounded-[2rem] flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-green-500 text-white rounded-xl shadow-lg shadow-green-500/20"><CheckCircle size={20}/></div>
+                      <p className="text-xs font-black text-green-800 uppercase tracking-tight">Relieving Letter Injected into Registry</p>
+                    </div>
+                    <p className="text-[9px] font-black text-green-600 uppercase tracking-widest">Check Documents Tab</p>
+                  </div>
+                )}
               </div>
             </section>
           )}
 
-          {/* Admin List of Resignations */}
           {isHR && (
             <section className="space-y-4">
               <h2 className="text-sm font-black text-blue-900 uppercase tracking-widest px-4 flex items-center gap-2">
@@ -188,7 +223,7 @@ const ExitManagement: React.FC<ExitManagementProps> = ({
                             <>
                               <button 
                                 onClick={() => handleAction(req.id, 'Accepted')}
-                                className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-green-600 transition-all shadow-lg shadow-green-500/10 active:scale-95"
+                                className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-green-600 shadow-lg shadow-green-500/10 active:scale-95"
                               >
                                 <CheckCircle size={14} /> Accept
                               </button>
@@ -230,7 +265,6 @@ const ExitManagement: React.FC<ExitManagementProps> = ({
           )}
         </div>
 
-        {/* Policies Section */}
         <div className="space-y-8">
           <section className="bg-slate-900 text-white rounded-[3rem] p-10 border border-slate-800 shadow-2xl relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-10 text-white/5 pointer-events-none group-hover:text-red-500/10 transition-all duration-700">
@@ -282,11 +316,10 @@ const ExitManagement: React.FC<ExitManagementProps> = ({
         </div>
       </div>
 
-      {/* Resignation Application Modal */}
       {isApplying && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setIsApplying(false)}></div>
-          <div className="relative bg-white rounded-[3rem] p-10 max-w-md w-full shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-400">
+          <div className="relative bg-white rounded-[3rem] p-10 max-md w-full shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-400">
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-red-600 text-white rounded-2xl shadow-lg shadow-red-900/20"><LogOut size={20}/></div>
