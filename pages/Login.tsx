@@ -1,21 +1,25 @@
 
 import React, { useState } from 'react';
-import { User as UserIcon, Lock, AlertCircle, Eye, EyeOff, Snowflake, Ban } from 'lucide-react';
+import { User as UserIcon, Lock, AlertCircle, Eye, EyeOff, Snowflake, Ban, Clock } from 'lucide-react';
 import Logo from '../components/Logo';
-import { UserRole, User } from '../types';
+import { UserRole, User, Employee } from '../types';
 import { MOCK_EMPLOYEES } from '../constants';
 
 interface LoginProps {
   onLogin: (user: User) => void;
-  employees: any[]; // Accept current employees state from App
+  employees: Employee[];
+  setEmployees: React.Dispatch<React.SetStateAction<Employee[]>>;
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin, employees }) => {
+const Login: React.FC<LoginProps> = ({ onLogin, employees, setEmployees }) => {
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  const LOCKOUT_THRESHOLD = 5;
+  const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,19 +31,44 @@ const Login: React.FC<LoginProps> = ({ onLogin, employees }) => {
       // Search for employee in current application state
       const employee = employees.find(emp => emp.id === userId.trim() || emp.employeeId === userId.trim());
       
-      if (employee && employee.password === password) {
-        // Check account status
-        if (employee.status === 'Frozen') {
-          setError('ACCESS DENIED: Your account is temporarily frozen. Please contact the HR department.');
+      if (!employee) {
+        setError('Invalid Personnel ID or Access Token. Please try again.');
+        setIsLoading(false);
+        return;
+      }
+
+      // Check account status
+      if (employee.status === 'Frozen') {
+        setError('ACCESS DENIED: Your account is temporarily frozen. Please contact the HR department.');
+        setIsLoading(false);
+        return;
+      }
+      
+      if (employee.status === 'Inactive') {
+        setError('ACCESS DENIED: This account has been deactivated and is no longer valid.');
+        setIsLoading(false);
+        return;
+      }
+
+      // Check for lockout
+      if (employee.lockoutUntil) {
+        const lockoutTime = new Date(employee.lockoutUntil).getTime();
+        const now = Date.now();
+        if (now < lockoutTime) {
+          const remainingMinutes = Math.ceil((lockoutTime - now) / 60000);
+          setError(`SECURITY LOCKOUT: Too many failed attempts. Access restricted for another ${remainingMinutes} minute(s).`);
           setIsLoading(false);
           return;
         }
-        
-        if (employee.status === 'Inactive') {
-          setError('ACCESS DENIED: This account has been deactivated and is no longer valid.');
-          setIsLoading(false);
-          return;
-        }
+      }
+
+      if (employee.password === password) {
+        // Successful login: Reset failed attempts and lockout
+        setEmployees(prev => prev.map(emp => 
+          emp.id === employee.id 
+            ? { ...emp, failedLoginAttempts: 0, lockoutUntil: null } 
+            : emp
+        ));
 
         const userRole: UserRole = employee.role.includes('HR') ? 'HR' : 'Employee';
         const user: User = {
@@ -51,7 +80,23 @@ const Login: React.FC<LoginProps> = ({ onLogin, employees }) => {
         };
         onLogin(user);
       } else {
-        setError('Invalid Personnel ID or Access Token. Please try again.');
+        // Failed login attempt
+        const newFailedAttempts = (employee.failedLoginAttempts || 0) + 1;
+        let newLockoutUntil = employee.lockoutUntil || null;
+
+        if (newFailedAttempts >= LOCKOUT_THRESHOLD) {
+          newLockoutUntil = new Date(Date.now() + LOCKOUT_DURATION_MS).toISOString();
+          setError(`SECURITY LOCKOUT: 5 failed attempts reached. Account is now locked for 15 minutes.`);
+        } else {
+          setError(`Invalid Personnel ID or Access Token. Attempt ${newFailedAttempts} of ${LOCKOUT_THRESHOLD}.`);
+        }
+
+        setEmployees(prev => prev.map(emp => 
+          emp.id === employee.id 
+            ? { ...emp, failedLoginAttempts: newFailedAttempts, lockoutUntil: newLockoutUntil } 
+            : emp
+        ));
+
         setIsLoading(false);
       }
     }, 800);
@@ -75,7 +120,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, employees }) => {
 
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600 animate-in slide-in-from-top-2">
-            {error.includes('frozen') ? <Snowflake size={18} className="flex-shrink-0" /> : <Ban size={18} className="flex-shrink-0" />}
+            {error.includes('frozen') ? <Snowflake size={18} className="flex-shrink-0" /> : 
+             error.includes('LOCKOUT') ? <Clock size={18} className="flex-shrink-0" /> : <Ban size={18} className="flex-shrink-0" />}
             <p className="text-xs font-bold text-left leading-tight">{error}</p>
           </div>
         )}
@@ -141,7 +187,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, employees }) => {
         <div className="mt-10 pt-6 border-t border-gray-50">
           <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest leading-loose">
             Security Notice: Unauthorized access is strictly prohibited. <br/>
-            Contact IT Support for credential recovery.
+            Account will be locked for 15 minutes after 5 failed attempts.
           </p>
           
           <div className="mt-4 flex flex-col gap-1 items-center">

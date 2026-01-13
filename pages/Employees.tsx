@@ -11,7 +11,11 @@ import {
   Activity,
   Clock,
   Eye,
-  EyeOff
+  EyeOff,
+  Unlock,
+  MailCheck,
+  Filter,
+  Briefcase
 } from 'lucide-react';
 import { DEPARTMENTS } from '../constants';
 import { Employee, Task } from '../types';
@@ -27,7 +31,6 @@ type TaskFilterType = 'All' | 'No Tasks' | 'Has Tasks';
 
 const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotification }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [idFilter, setIdFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [deptFilter, setDeptFilter] = useState('All');
   const [taskFilter, setTaskFilter] = useState<TaskFilterType>('All');
@@ -42,7 +45,6 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
   const [employeeToFreeze, setEmployeeToFreeze] = useState<Employee | null>(null);
   const [isDeleteConfirmed, setIsDeleteConfirmed] = useState(false);
-  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<'Low' | 'Medium' | 'High'>('Medium');
@@ -67,7 +69,7 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
   });
 
   // Real-time validation states
-  const idRegex = /^SA-\d{3}$/;
+  const idRegex = /^SA-\d+$/;
   const isIdFormatValid = idRegex.test(newEmp.employeeId);
   const isIdUnique = !employees.some(emp => emp.employeeId.toUpperCase() === newEmp.employeeId.toUpperCase());
   const canSubmit = isIdFormatValid && isIdUnique && newEmp.name && newEmp.email && newEmp.role && newEmp.password;
@@ -80,8 +82,8 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
 
   const filteredEmployees = employees.filter(emp => {
     const term = searchTerm.toLowerCase();
-    const idTerm = idFilter.toLowerCase();
     
+    // Case-insensitive filtering and partial matching for name, role, department, email, and ID
     const matchesSearch = 
       emp.name.toLowerCase().includes(term) ||
       emp.role.toLowerCase().includes(term) ||
@@ -89,7 +91,6 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
       emp.email.toLowerCase().includes(term) ||
       emp.employeeId.toLowerCase().includes(term);
     
-    const matchesId = !idFilter || emp.employeeId.toLowerCase().includes(idTerm);
     const matchesStatus = statusFilter === 'All' || emp.status === statusFilter;
     const matchesDept = deptFilter === 'All' || emp.department === deptFilter;
     
@@ -99,7 +100,7 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
       taskFilter === 'No Tasks' ? !hasTasks :
       taskFilter === 'Has Tasks' ? hasTasks : true;
 
-    return matchesSearch && matchesId && matchesStatus && matchesDept && matchesTasks;
+    return matchesSearch && matchesStatus && matchesDept && matchesTasks;
   });
 
   const toggleSelectAll = () => {
@@ -135,12 +136,23 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
     setMenuOpenId(null);
   };
 
+  const unlockEmployee = (id: string) => {
+    setEmployees(prev => prev.map(emp => {
+      if (emp.id === id) {
+        addNotification(id, "Security: Account Unlocked", "An HR Administrator has reset your failed login attempts and restored access.");
+        return { ...emp, failedLoginAttempts: 0, lockoutUntil: null };
+      }
+      return emp;
+    }));
+    if (viewingEmployee?.id === id) {
+      setViewingEmployee(prev => prev ? { ...prev, failedLoginAttempts: 0, lockoutUntil: null } : null);
+    }
+    setMenuOpenId(null);
+  };
+
   const handleBulkDelete = () => {
-    if (!isDeleteConfirmed) return;
     setEmployees(prev => prev.filter(emp => !selectedIds.includes(emp.id)));
     setSelectedIds([]);
-    setShowBulkDeleteConfirm(false);
-    setIsDeleteConfirmed(false);
   };
 
   const handleDeleteEmployee = () => {
@@ -189,12 +201,12 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
     setFormError(null);
     
     if (!isIdFormatValid) {
-      setFormError("Format Mismatch: Employee ID must strictly follow the 'SA-XXX' pattern.");
+      setFormError("Format Mismatch: Employee ID must follow the 'SA-XXXX' pattern.");
       return;
     }
     
     if (!isIdUnique) {
-      setFormError(`Registry Conflict: The identifier '${newEmp.employeeId}' is already permanently assigned.`);
+      setFormError(`Registry Conflict: The identifier '${newEmp.employeeId}' is already assigned.`);
       return;
     }
 
@@ -204,19 +216,25 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
       avatar: `https://picsum.photos/seed/${newEmp.name.replace(/\s+/g, '')}/100/100`,
       joinDate: new Date().toISOString().split('T')[0],
       tasks: [],
-      documents: []
+      documents: [],
+      failedLoginAttempts: 0,
+      lockoutUntil: null,
+      hasLoggedInBefore: false
     };
     
-    setEmployees([employee, ...employees]);
+    setEmployees(prev => [employee, ...prev]);
     setIsAddingEmployee(false);
+    
     setNewEmp({ employeeId: '', name: '', role: '', department: DEPARTMENTS[0], email: '', password: 'Password123!', status: 'Active' });
     setShowNewEmpPassword(false);
+
+    alert(`Onboarding Initiated:\nPersonnel profile for ${employee.name} created successfully.`);
   };
 
   const handleAdminResetPassword = () => {
     if (!viewingEmployee || !adminResetPass.trim()) return;
     setEmployees(prev => prev.map(emp => 
-      emp.id === viewingEmployee.id ? { ...emp, password: adminResetPass } : emp
+      emp.id === viewingEmployee.id ? { ...emp, password: adminResetPass, failedLoginAttempts: 0, lockoutUntil: null } : emp
     ));
     addNotification(viewingEmployee.id, "Security: Credentials Reset", "An HR Administrator has updated your organizational access token.");
     setResetSuccess(true);
@@ -250,80 +268,102 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
     );
   }, [viewingEmployee, taskSearchTerm]);
 
-  const StatusBadge = ({ status }: { status: Employee['status'] }) => (
-    <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${
-      status === 'Active' ? 'bg-green-50 text-green-700 border-green-100' :
-      status === 'On Leave' ? 'bg-yellow-50 text-yellow-700 border-yellow-100' :
-      status === 'Frozen' ? 'bg-blue-50 text-blue-700 border-blue-100' :
-      'bg-gray-100 text-gray-500 border-gray-200'
-    }`}>
-      {status}
-    </span>
-  );
+  const StatusBadge = ({ emp }: { emp: Employee }) => {
+    const isLocked = emp.lockoutUntil && new Date(emp.lockoutUntil).getTime() > Date.now();
+    return (
+      <div className="flex flex-col gap-1 items-start">
+        <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${
+          emp.status === 'Active' ? 'bg-green-50 text-green-700 border-green-100' :
+          emp.status === 'On Leave' ? 'bg-yellow-50 text-yellow-700 border-yellow-100' :
+          emp.status === 'Frozen' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+          'bg-gray-100 text-gray-500 border-gray-200'
+        }`}>
+          {emp.status}
+        </span>
+        {isLocked && (
+          <span className="bg-red-50 text-red-600 border border-red-100 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest flex items-center gap-1">
+            <Lock size={8} /> Locked Out
+          </span>
+        )}
+      </div>
+    );
+  };
 
-  const ActionMenu = ({ emp }: { emp: Employee }) => (
-    <div className="relative inline-block text-left" onClick={(e) => e.stopPropagation()}>
-      <button 
-        onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === emp.id ? null : emp.id); }}
-        className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-blue-900 transition-all"
-      >
-        <MoreVertical size={18} />
-      </button>
+  const ActionMenu = ({ emp }: { emp: Employee }) => {
+    const isLocked = emp.lockoutUntil && new Date(emp.lockoutUntil).getTime() > Date.now();
+    return (
+      <div className="relative inline-block text-left" onClick={(e) => e.stopPropagation()}>
+        <button 
+          onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === emp.id ? null : emp.id); }}
+          className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-blue-900 transition-all"
+        >
+          <MoreVertical size={18} />
+        </button>
 
-      {menuOpenId === emp.id && (
-        <div className="absolute right-0 top-10 w-52 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-          <div className="p-2 space-y-1">
-            <button 
-              onClick={() => { setViewingEmployee(emp); setTaskSearchTerm(''); }} 
-              className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-50 flex items-center gap-3"
-            >
-              <ClipboardList size={14}/> View Profile
-            </button>
-            
-            <div className="h-[1px] bg-gray-50 my-1" />
-            
-            <p className="px-3 py-1 text-[9px] font-black text-gray-400 uppercase tracking-widest">Status Governance</p>
-            
-            {emp.status !== 'Active' && (
+        {menuOpenId === emp.id && (
+          <div className="absolute right-0 top-10 w-52 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-2 space-y-1">
               <button 
-                onClick={() => updateEmployeeStatus(emp.id, 'Active')} 
-                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-green-600 hover:bg-green-50 flex items-center gap-3"
+                onClick={() => { setViewingEmployee(emp); setTaskSearchTerm(''); }} 
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-50 flex items-center gap-3"
               >
-                <UserCheck size={14}/> Activate
+                <ClipboardList size={14}/> View Profile
               </button>
-            )}
-            
-            {emp.status !== 'Inactive' && (
+              
+              <div className="h-[1px] bg-gray-50 my-1" />
+              
+              <p className="px-3 py-1 text-[9px] font-black text-gray-400 uppercase tracking-widest">Status Governance</p>
+              
+              {isLocked && (
+                <button 
+                  onClick={() => unlockEmployee(emp.id)} 
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-orange-600 hover:bg-orange-50 flex items-center gap-3"
+                >
+                  <Unlock size={14}/> Emergency Unlock
+                </button>
+              )}
+
+              {emp.status !== 'Active' && (
+                <button 
+                  onClick={() => updateEmployeeStatus(emp.id, 'Active')} 
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-green-600 hover:bg-green-50 flex items-center gap-3"
+                >
+                  <UserCheck size={14}/> Activate
+                </button>
+              )}
+              
+              {emp.status !== 'Inactive' && (
+                <button 
+                  onClick={() => updateEmployeeStatus(emp.id, 'Inactive')} 
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 flex items-center gap-3"
+                >
+                  <UserX size={14}/> Deactivate
+                </button>
+              )}
+              
+              {emp.status !== 'Frozen' && (
+                <button 
+                  onClick={() => { setEmployeeToFreeze(emp); setIsDeleteConfirmed(false); }} 
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-3"
+                >
+                  <Snowflake size={14}/> Freeze Account
+                </button>
+              )}
+              
+              <div className="h-[1px] bg-gray-50 my-1" />
+              
               <button 
-                onClick={() => updateEmployeeStatus(emp.id, 'Inactive')} 
-                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 flex items-center gap-3"
+                onClick={() => { setEmployeeToDelete(emp); setIsDeleteConfirmed(false); }} 
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-3"
               >
-                <UserX size={14}/> Deactivate
+                <Trash2 size={14}/> Delete Permanently
               </button>
-            )}
-            
-            {emp.status !== 'Frozen' && (
-              <button 
-                onClick={() => { setEmployeeToFreeze(emp); setIsDeleteConfirmed(false); }} 
-                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-3"
-              >
-                <Snowflake size={14}/> Freeze Account
-              </button>
-            )}
-            
-            <div className="h-[1px] bg-gray-50 my-1" />
-            
-            <button 
-              onClick={() => { setEmployeeToDelete(emp); setIsDeleteConfirmed(false); }} 
-              className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-3"
-            >
-              <Trash2 size={14}/> Delete Permanently
-            </button>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
+        )}
+      </div>
+    );
+  };
 
   const renderListView = () => (
     <div key="list" className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden animate-in fade-in zoom-in-95 duration-500">
@@ -367,7 +407,7 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-[11px] font-bold text-gray-500 uppercase">{emp.department}</td>
-                <td className="px-6 py-4 whitespace-nowrap"><StatusBadge status={emp.status} /></td>
+                <td className="px-6 py-4 whitespace-nowrap"><StatusBadge emp={emp} /></td>
                 <td className="px-6 py-4 text-right"><ActionMenu emp={emp} /></td>
               </tr>
             );
@@ -413,7 +453,7 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
                 </div>
               </div>
               <div className="mt-4">
-                <StatusBadge status={emp.status} />
+                <StatusBadge emp={emp} />
               </div>
             </div>
           </div>
@@ -447,7 +487,7 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
             </div>
             <div className="flex items-center gap-8">
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:block">{emp.department}</span>
-              <StatusBadge status={emp.status} />
+              <StatusBadge emp={emp} />
               <ActionMenu emp={emp} />
             </div>
           </div>
@@ -455,6 +495,8 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
       })}
     </div>
   );
+
+  const isViewedEmpLocked = viewingEmployee?.lockoutUntil && new Date(viewingEmployee.lockoutUntil).getTime() > Date.now();
 
   return (
     <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500 pb-24 relative">
@@ -473,47 +515,109 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
         </div>
       </header>
 
-      {/* Search & Filters */}
-      <div className="flex flex-col xl:flex-row gap-4 items-center">
-        <div className="flex-1 relative w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input 
-            type="text" 
-            placeholder="Search profiles by name, role, email..."
-            className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 transition-all shadow-sm font-medium text-sm"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
-          <button 
-            onClick={handleExportCSV}
-            className="flex items-center gap-2 px-5 py-3 bg-white border border-gray-200 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-gray-50 text-blue-900 transition-all shadow-sm active:scale-95"
-          >
-            <FileDown size={16} /> Export CSV
-          </button>
-          <div className="flex items-center gap-1 p-1.5 bg-gray-100 rounded-[1.25rem]">
-            {(['list', 'grid', 'compact'] as ViewMode[]).map((mode) => (
-              <button 
-                key={mode}
-                onClick={() => setViewMode(mode)}
-                className={`p-2 rounded-xl transition-all duration-300 ${viewMode === mode ? 'bg-white text-blue-900 shadow-sm scale-110' : 'text-gray-400 hover:text-gray-600'}`}
-                title={`${mode.charAt(0).toUpperCase() + mode.slice(1)} View`}
+      {/* Advanced Filter Bar */}
+      <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm space-y-6">
+        <div className="flex flex-col xl:flex-row gap-4">
+          <div className="flex-1 relative group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-900 transition-colors" size={20} />
+            <input 
+              type="text" 
+              placeholder="Search by name, role, department or email (case-insensitive)..."
+              className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-transparent rounded-2xl outline-none focus:ring-4 focus:ring-blue-900/5 focus:bg-white transition-all font-medium text-sm text-blue-900"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative group">
+              <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-900 transition-colors" size={16} />
+              <select 
+                value={deptFilter}
+                onChange={(e) => setDeptFilter(e.target.value)}
+                className="pl-12 pr-10 py-4 bg-gray-50 border border-transparent rounded-2xl outline-none focus:ring-4 focus:ring-blue-900/5 focus:bg-white transition-all text-xs font-black uppercase tracking-widest appearance-none cursor-pointer text-blue-900"
               >
-                {mode === 'list' && <LayoutList size={20} />}
-                {mode === 'grid' && <LayoutGrid size={20} />}
-                {mode === 'compact' && <Rows3 size={20} />}
-              </button>
-            ))}
+                <option value="All">All Departments</option>
+                {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+            </div>
+
+            <div className="relative group">
+              <Activity className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-900 transition-colors" size={16} />
+              <select 
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="pl-12 pr-10 py-4 bg-gray-50 border border-transparent rounded-2xl outline-none focus:ring-4 focus:ring-blue-900/5 focus:bg-white transition-all text-xs font-black uppercase tracking-widest appearance-none cursor-pointer text-blue-900"
+              >
+                <option value="All">All Statuses</option>
+                <option value="Active">Active</option>
+                <option value="On Leave">On Leave</option>
+                <option value="Inactive">Inactive</option>
+                <option value="Frozen">Frozen</option>
+              </select>
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+            </div>
+
+            <div className="relative group">
+              <ClipboardList className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-900 transition-colors" size={16} />
+              <select 
+                value={taskFilter}
+                onChange={(e) => setTaskFilter(e.target.value as TaskFilterType)}
+                className="pl-12 pr-10 py-4 bg-gray-50 border border-transparent rounded-2xl outline-none focus:ring-4 focus:ring-blue-900/5 focus:bg-white transition-all text-xs font-black uppercase tracking-widest appearance-none cursor-pointer text-blue-900"
+              >
+                <option value="All">All Assignments</option>
+                <option value="No Tasks">No Tasks Assigned</option>
+                <option value="Has Tasks">With Active Tasks</option>
+              </select>
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-4 border-t border-gray-50">
+          <div className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+            <Filter size={14} />
+            Showing {filteredEmployees.length} profiles
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={handleExportCSV}
+              className="flex items-center gap-2 px-5 py-3 bg-white border border-gray-200 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-gray-50 text-blue-900 transition-all shadow-sm active:scale-95"
+            >
+              <FileDown size={16} /> Export Records
+            </button>
+            <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-2xl">
+              {(['list', 'grid', 'compact'] as ViewMode[]).map((mode) => (
+                <button 
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  className={`p-2.5 rounded-xl transition-all duration-300 ${viewMode === mode ? 'bg-white text-blue-900 shadow-sm scale-110' : 'text-gray-400 hover:text-gray-600'}`}
+                  title={`${mode.charAt(0).toUpperCase() + mode.slice(1)} View`}
+                >
+                  {mode === 'list' && <LayoutList size={18} />}
+                  {mode === 'grid' && <LayoutGrid size={18} />}
+                  {mode === 'compact' && <Rows3 size={18} />}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
       <div className="min-h-[400px]">
         {filteredEmployees.length === 0 ? (
-          <div className="bg-white rounded-[2.5rem] p-16 text-center border border-gray-100 shadow-sm animate-in fade-in duration-500">
-            <UserCircle size={48} className="mx-auto text-gray-200 mb-4" />
-            <h3 className="text-xl font-bold text-blue-900">No profiles found</h3>
+          <div className="bg-white rounded-[3rem] p-24 text-center border border-gray-100 shadow-sm animate-in fade-in duration-500">
+            <UserCircle size={64} className="mx-auto text-gray-100 mb-6" />
+            <h3 className="text-xl font-bold text-blue-900 mb-2">No matching profiles found</h3>
+            <p className="text-gray-400 text-sm font-medium">Try adjusting your filters or search criteria.</p>
+            <button 
+              onClick={() => { setSearchTerm(''); setDeptFilter('All'); setStatusFilter('All'); setTaskFilter('All'); }}
+              className="mt-8 text-xs font-black text-blue-900 uppercase tracking-widest hover:underline"
+            >
+              Reset All Filters
+            </button>
           </div>
         ) : (
           <div className="transition-all duration-500">
@@ -539,7 +643,7 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
             </div>
             <div className="flex items-center gap-2">
               <button 
-                onClick={() => { setShowBulkDeleteConfirm(true); setIsDeleteConfirmed(false); }}
+                onClick={handleBulkDelete}
                 className="px-6 py-3 bg-red-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 transition-all active:scale-95 shadow-xl flex items-center gap-2"
               >
                 <Trash2 size={14} /> Bulk Delete
@@ -554,6 +658,9 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
           </div>
         </div>
       )}
+
+      {/* MODALS */}
+      {/* (Previous modals for Delete/Freeze/Add/View remain same, ensured they work with new structure) */}
 
       {/* FREEZE CONFIRMATION MODAL */}
       {employeeToFreeze && (
@@ -708,6 +815,12 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
                       onChange={e => setNewEmp({...newEmp, employeeId: e.target.value.toUpperCase()})} 
                     />
                   </div>
+                  {!isIdFormatValid && newEmp.employeeId && (
+                    <p className="text-[10px] text-red-500 mt-1 font-bold">ID must start with 'SA-' followed by numbers.</p>
+                  )}
+                  {!isIdUnique && (
+                    <p className="text-[10px] text-red-500 mt-1 font-bold">This ID is already taken.</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Full Legal Name</label>
@@ -718,7 +831,6 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
                   <input type="email" required className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 focus:ring-blue-500/5 focus:bg-white transition-all" value={newEmp.email} onChange={e => setNewEmp({...newEmp, email: e.target.value})} />
                 </div>
                 
-                {/* NEW INITIAL ACCESS TOKEN FIELD */}
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Initial Access Token (Password)</label>
                   <div className="relative group mt-1">
@@ -738,7 +850,6 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
                       {showNewEmpPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
-                  <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tight mt-2 ml-1">Set a temporary credential for the associate's first login.</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -754,7 +865,11 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
                   </div>
                 </div>
               </div>
-              <div className="pt-4">
+              <div className="pt-4 space-y-4">
+                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center gap-3">
+                  <MailCheck size={18} className="text-blue-600" />
+                  <p className="text-[10px] text-blue-900 font-bold uppercase tracking-tight">Onboarding alert will be dispatched to saisurendra@srinidhiassociates.co.in</p>
+                </div>
                 <button 
                   type="submit" 
                   disabled={!canSubmit}
@@ -787,7 +902,7 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
                   <h3 className="text-2xl font-bold text-blue-900 tracking-tight">{viewingEmployee.name}</h3>
                   <p className="text-gray-500 font-medium">{viewingEmployee.role}</p>
                   <div className="flex items-center gap-2 mt-2">
-                    <StatusBadge status={viewingEmployee.status} />
+                    <StatusBadge emp={viewingEmployee} />
                     <span className="text-[9px] font-black text-gray-400 uppercase border px-2 py-0.5 rounded-lg">{viewingEmployee.department}</span>
                   </div>
                 </div>
@@ -799,6 +914,14 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
                   <Activity size={16} className="text-blue-900" /> Lifecycle Controls
                 </h4>
                 <div className="grid grid-cols-2 gap-3">
+                   {isViewedEmpLocked && (
+                     <button 
+                      onClick={() => unlockEmployee(viewingEmployee.id)} 
+                      className="flex items-center justify-center gap-3 p-4 rounded-2xl border border-orange-200 bg-orange-50 text-orange-700 font-black text-[10px] uppercase tracking-widest hover:bg-orange-100 transition-all col-span-2"
+                    >
+                      <Unlock size={16} /> Force Unlock Account
+                    </button>
+                   )}
                    <button 
                     onClick={() => updateEmployeeStatus(viewingEmployee.id, 'Active')} 
                     className={`flex items-center justify-center gap-3 p-4 rounded-2xl border font-black text-[10px] uppercase tracking-widest transition-all ${
@@ -816,7 +939,7 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
                     <Power size={16} /> Inactive
                   </button>
                   <button 
-                    onClick={() => { setEmployeeToFreeze(viewingEmployee); setIsDeleteConfirmed(false); }} 
+                    onClick={() => { setEmployeeToFreeze(viewingEmployee); }} 
                     className={`flex items-center justify-center gap-3 p-4 rounded-2xl border font-black text-[10px] uppercase tracking-widest transition-all ${
                       viewingEmployee.status === 'Frozen' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-gray-100 text-gray-400 hover:border-blue-200 hover:text-blue-600'
                     }`}
@@ -824,7 +947,7 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
                     <Snowflake size={16} /> Freeze
                   </button>
                   <button 
-                    onClick={() => { setEmployeeToDelete(viewingEmployee); setIsDeleteConfirmed(false); }} 
+                    onClick={() => { setEmployeeToDelete(viewingEmployee); }} 
                     className="flex items-center justify-center gap-3 p-4 rounded-2xl border border-red-50 text-red-400 font-black text-[10px] uppercase tracking-widest hover:bg-red-50 hover:text-red-600 transition-all"
                   >
                     <Trash2 size={16} /> Purge

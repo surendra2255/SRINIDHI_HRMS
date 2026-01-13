@@ -11,7 +11,9 @@ import {
   Clock,
   UserCircle,
   ShieldCheck,
-  Lock
+  Lock,
+  Plane,
+  LogOut
 } from 'lucide-react';
 import { UserRole, Employee } from './types';
 
@@ -25,6 +27,8 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, roles: ['HR', 'Employee'] },
   { id: 'tasks', label: 'My Tasks', icon: <ClipboardList size={20} />, roles: ['Employee'] },
+  { id: 'leave', label: 'Leave Mgmt', icon: <Plane size={20} />, roles: ['HR', 'Employee'] },
+  { id: 'exit', label: 'Exit Mgmt', icon: <LogOut size={20} />, roles: ['HR', 'Employee'] },
   { id: 'profiles', label: 'Profiles', icon: <UserCircle size={20} />, roles: ['HR'] },
   { id: 'documents', label: 'Documents', icon: <FileText size={20} />, roles: ['HR', 'Employee'] },
   { id: 'recruitment', label: 'Recruitment', icon: <Briefcase size={20} />, roles: ['HR'] },
@@ -45,6 +49,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     status: 'Active', 
     avatar: 'https://picsum.photos/seed/alice/100/100', 
     joinDate: '2022-03-15',
+    hasLoggedInBefore: true,
     tasks: [
       { id: 't1', title: 'Complete code review for v2.0', dueDate: '2024-05-20', status: 'Completed', priority: 'High' },
       { id: 't2', title: 'Onboard new junior dev', dueDate: '2024-06-01', status: 'In Progress', priority: 'Medium' }
@@ -74,6 +79,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     status: 'Active', 
     avatar: 'https://picsum.photos/seed/bob/100/100', 
     joinDate: '2021-11-01',
+    hasLoggedInBefore: true,
     tasks: [
       { id: 't3', title: 'Finalize Q3 roadmap', dueDate: '2024-05-25', status: 'Pending', priority: 'High' }
     ],
@@ -90,6 +96,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     status: 'On Leave', 
     avatar: 'https://picsum.photos/seed/charlie/100/100', 
     joinDate: '2023-01-20',
+    hasLoggedInBefore: true,
     tasks: [],
     documents: []
   },
@@ -104,6 +111,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     status: 'Active', 
     avatar: 'https://picsum.photos/seed/diana/100/100', 
     joinDate: '2020-05-12',
+    hasLoggedInBefore: true,
     tasks: [
       { id: 't4', title: 'Review open recruitment JDs', dueDate: '2024-05-18', status: 'Completed', priority: 'Medium' }
     ],
@@ -111,4 +119,4 @@ export const MOCK_EMPLOYEES: Employee[] = [
   },
 ];
 
-export const DEPARTMENTS = ['Engineering', 'Product', 'Design', 'Sales', 'Marketing', 'Human Resources', 'Finance'];
+export const DEPARTMENTS = ['Engineering', 'Product', 'Design', 'Sales', 'Marketing', 'Human Resources', 'Finance', 'Operations'];

@@ -8,19 +8,24 @@ import Performance from './pages/Performance';
 import Documents from './pages/Documents';
 import Attendance from './pages/Attendance';
 import Security from './pages/Security';
+import LeaveManagement from './pages/LeaveManagement';
+import ExitManagement from './pages/ExitManagement';
 import Login from './pages/Login';
 import MyTasks from './pages/MyTasks';
-import { Bell, Search, LogOut, X, Clock, ShieldAlert } from 'lucide-react';
+import { Bell, Search, LogOut, X, Clock, ShieldAlert, Sparkles, PartyPopper, CheckCircle2 } from 'lucide-react';
 import Logo from './components/Logo';
-import { User, Employee, Notification, Task } from './types';
+import { User, Employee, Notification, Task, LeaveRequest, ResignationRequest } from './types';
 import { MOCK_EMPLOYEES } from './constants';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [employees, setEmployees] = useState<Employee[]>(MOCK_EMPLOYEES);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [resignationRequests, setResignationRequests] = useState<ResignationRequest[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
 
   const currentEmployee = employees.find(e => e.id === user?.id);
 
@@ -31,6 +36,13 @@ const App: React.FC = () => {
     }
   }, [currentEmployee?.mustChangePassword, activeTab]);
 
+  // Handle welcome screen visibility
+  useEffect(() => {
+    if (user && currentEmployee && !currentEmployee.hasLoggedInBefore) {
+      setShowWelcome(true);
+    }
+  }, [user, currentEmployee]);
+
   const handleLogin = (loggedInUser: User) => {
     setUser(loggedInUser);
     setActiveTab('dashboard');
@@ -39,6 +51,16 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setUser(null);
     setShowNotifications(false);
+    setShowWelcome(false);
+  };
+
+  const handleFinishWelcome = () => {
+    if (user) {
+      setEmployees(prev => prev.map(emp => 
+        emp.id === user.id ? { ...emp, hasLoggedInBefore: true } : emp
+      ));
+    }
+    setShowWelcome(false);
   };
 
   const addNotification = (userId: string, title: string, message: string) => {
@@ -87,6 +109,24 @@ const App: React.FC = () => {
       case 'recruitment': return user.role === 'HR' ? <Recruitment /> : <Dashboard />;
       case 'performance': return <Performance />;
       case 'attendance': return <Attendance user={user} />;
+      case 'leave': return (
+        <LeaveManagement 
+          user={user} 
+          leaveRequests={leaveRequests} 
+          setLeaveRequests={setLeaveRequests}
+          addNotification={addNotification}
+          employees={employees}
+        />
+      );
+      case 'exit': return (
+        <ExitManagement
+          user={user}
+          resignationRequests={resignationRequests}
+          setResignationRequests={setResignationRequests}
+          addNotification={addNotification}
+          employees={employees}
+        />
+      );
       case 'documents': return (
         <Documents 
           user={user} 
@@ -102,11 +142,71 @@ const App: React.FC = () => {
 
   // If user is not logged in, show the Login page
   if (!user) {
-    return <Login onLogin={handleLogin} employees={employees} />;
+    return <Login onLogin={handleLogin} employees={employees} setEmployees={setEmployees} />;
   }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
+      {/* Welcome Screen Modal */}
+      {showWelcome && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-[#1e3a8a]/95 backdrop-blur-xl animate-in fade-in duration-700">
+          <div className="max-w-2xl w-full bg-white rounded-[3rem] p-12 text-center relative overflow-hidden shadow-2xl animate-in zoom-in-95 duration-500">
+            {/* Decorative background shapes */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50 rounded-full -mr-32 -mt-32 opacity-50 blur-3xl"></div>
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-50 rounded-full -ml-32 -mb-32 opacity-50 blur-3xl"></div>
+            
+            <div className="relative z-10 flex flex-col items-center">
+              <div className="w-24 h-24 bg-blue-900 rounded-[2rem] flex items-center justify-center mb-8 shadow-2xl shadow-blue-900/20 rotate-3 transition-transform hover:rotate-0">
+                <Logo className="w-16 h-16" />
+              </div>
+              
+              <div className="space-y-4 mb-10">
+                <div className="flex items-center justify-center gap-3 text-blue-600">
+                  <Sparkles size={20} />
+                  <span className="text-[10px] font-black uppercase tracking-[0.3em]">Official Onboarding</span>
+                  <Sparkles size={20} />
+                </div>
+                <h1 className="text-4xl font-black text-blue-900 uppercase tracking-tighter serif leading-tight">
+                  Welcome to the <br/> Srinidhi Family
+                </h1>
+                <p className="text-gray-500 font-medium text-lg max-w-md mx-auto">
+                  Hello, <span className="text-blue-900 font-bold">{user.name}</span>. We're thrilled to have you join our world-class team of professionals.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full mb-10">
+                <div className="p-6 bg-gray-50 rounded-3xl border border-gray-100 flex flex-col items-center text-center">
+                  <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-blue-900 mb-3">
+                    <CheckCircle2 size={20} />
+                  </div>
+                  <h3 className="text-xs font-black text-blue-900 uppercase tracking-widest mb-1">Onboarding Active</h3>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">Email dispatched to HR Desk</p>
+                </div>
+                <div className="p-6 bg-gray-50 rounded-3xl border border-gray-100 flex flex-col items-center text-center">
+                  <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-purple-600 mb-3">
+                    <PartyPopper size={20} />
+                  </div>
+                  <h3 className="text-xs font-black text-blue-900 uppercase tracking-widest mb-1">Growth Ready</h3>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">Your digital workspace is primed</p>
+                </div>
+              </div>
+
+              <button 
+                onClick={handleFinishWelcome}
+                className="w-full py-5 bg-blue-900 text-white rounded-[2rem] font-black uppercase tracking-widest hover:bg-blue-800 transition-all shadow-xl shadow-blue-900/20 active:scale-95 group flex items-center justify-center gap-3"
+              >
+                Initialize Workspace
+                <Sparkles size={18} className="group-hover:rotate-12 transition-transform" />
+              </button>
+              
+              <p className="mt-6 text-[9px] text-gray-400 font-bold uppercase tracking-[0.2em]">
+                Securely synchronized with saisurendra@srinidhiassociates.co.in
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 

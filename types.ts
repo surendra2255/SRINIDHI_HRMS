@@ -26,6 +26,36 @@ export interface Notification {
   isRead: boolean;
 }
 
+export type LeaveStatus = 'Pending Supervisor' | 'Pending HOD' | 'Approved' | 'Rejected' | 'Policy Violation (HR)';
+
+export interface LeaveRequest {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  department: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  type: 'Annual' | 'Sick' | 'Personal' | 'Maternity/Paternity';
+  status: LeaveStatus;
+  appliedDate: string;
+  supervisorApproved?: boolean;
+  hodApproved?: boolean;
+}
+
+export type ResignationStatus = 'Pending' | 'Accepted' | 'Rejected' | 'Withdrawn';
+
+export interface ResignationRequest {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  reason: string;
+  appliedDate: string;
+  lastWorkingDate: string;
+  status: ResignationStatus;
+  feedback?: string;
+}
+
 export interface Employee {
   id: string;
   employeeId: string;
@@ -35,11 +65,16 @@ export interface Employee {
   email: string;
   password?: string;
   mustChangePassword?: boolean;
+  failedLoginAttempts?: number;
+  lockoutUntil?: string | null;
+  hasLoggedInBefore?: boolean;
   status: 'Active' | 'On Leave' | 'Inactive' | 'Frozen';
   avatar: string;
   joinDate: string;
   tasks?: Task[];
   documents?: Document[];
+  leaveRequests?: LeaveRequest[];
+  resignation?: ResignationRequest;
 }
 
 export interface DocumentHistoryEntry {

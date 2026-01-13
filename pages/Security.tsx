@@ -28,7 +28,8 @@ import {
   RefreshCcw,
   Sparkles,
   SearchCheck,
-  ShieldQuestion
+  ShieldQuestion,
+  Clock
 } from 'lucide-react';
 import { User, Employee } from '../types';
 
@@ -137,7 +138,7 @@ const Security: React.FC<SecurityProps> = ({ user, employees, setEmployees, addN
     // Simulate update delay
     setTimeout(() => {
       setEmployees(prev => prev.map(emp => 
-        emp.id === user.id ? { ...emp, password: newPass, mustChangePassword: false } : emp
+        emp.id === user.id ? { ...emp, password: newPass, mustChangePassword: false, failedLoginAttempts: 0, lockoutUntil: null } : emp
       ));
       
       setIsUpdating(false);
@@ -171,7 +172,9 @@ const Security: React.FC<SecurityProps> = ({ user, employees, setEmployees, addN
           return {
             ...emp,
             password: globalResetToken,
-            mustChangePassword: true
+            mustChangePassword: true,
+            failedLoginAttempts: 0,
+            lockoutUntil: null
           };
         });
         return updated;
@@ -614,6 +617,63 @@ const Security: React.FC<SecurityProps> = ({ user, employees, setEmployees, addN
                   </div>
                 </div>
               )}
+            </div>
+          </section>
+
+          {/* Security Policy Section */}
+          <section className="bg-white rounded-[3rem] p-8 md:p-12 border border-gray-100 shadow-sm transition-all hover:shadow-md">
+            <div className="flex items-center gap-4 mb-8">
+              <div className="p-4 bg-blue-50 text-blue-900 rounded-2xl">
+                <ShieldCheck size={28} />
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-blue-900 uppercase tracking-tighter leading-none">Organizational Security Policy</h2>
+                <p className="text-gray-400 font-bold text-[10px] uppercase tracking-widest mt-1">Personnel access & protection guidelines</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="p-6 bg-gray-50 rounded-3xl border border-gray-100 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-900 text-white rounded-lg"><Clock size={16} /></div>
+                  <h3 className="text-xs font-black text-blue-900 uppercase tracking-widest">Account Lockout Policy</h3>
+                </div>
+                <ul className="space-y-3">
+                  <li className="flex items-start gap-3">
+                    <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center text-blue-900 font-black text-[8px] shrink-0 mt-0.5">01</div>
+                    <p className="text-[11px] text-gray-500 font-bold leading-relaxed uppercase tracking-tight">Access restricted after <span className="text-blue-900">5 consecutive failed attempts</span>.</p>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center text-blue-900 font-black text-[8px] shrink-0 mt-0.5">02</div>
+                    <p className="text-[11px] text-gray-500 font-bold leading-relaxed uppercase tracking-tight">Temporary lockout duration fixed at <span className="text-blue-900">15 minutes</span>.</p>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center text-blue-900 font-black text-[8px] shrink-0 mt-0.5">03</div>
+                    <p className="text-[11px] text-gray-500 font-bold leading-relaxed uppercase tracking-tight">HR Administrator override available for emergency unlocking.</p>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="p-6 bg-gray-50 rounded-3xl border border-gray-100 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-900 text-white rounded-lg"><Zap size={16} /></div>
+                  <h3 className="text-xs font-black text-blue-900 uppercase tracking-widest">Credential Complexity</h3>
+                </div>
+                <ul className="space-y-3">
+                  <li className="flex items-start gap-3">
+                    <CheckCircle size={14} className="text-green-500 shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-gray-500 font-bold uppercase tracking-tight">Minimum length of 8 characters mandated.</p>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle size={14} className="text-green-500 shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-gray-500 font-bold uppercase tracking-tight">Required mix of Alpha-numeric & Special characters.</p>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle size={14} className="text-green-500 shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-gray-500 font-bold uppercase tracking-tight">Mandatory periodic password rotation (90 days).</p>
+                  </li>
+                </ul>
+              </div>
             </div>
           </section>
 
