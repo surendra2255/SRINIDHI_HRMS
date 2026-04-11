@@ -4,17 +4,44 @@ import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import Employees from './pages/Employees';
 import Recruitment from './pages/Recruitment';
-import Performance from './pages/Performance';
+import Appraisals from './pages/Appraisals';
 import Documents from './pages/Documents';
 import Attendance from './pages/Attendance';
 import Security from './pages/Security';
 import LeaveManagement from './pages/LeaveManagement';
 import ExitManagement from './pages/ExitManagement';
+import Assets from './pages/Assets';
+import RecoveryCRM from './pages/RecoveryCRM';
+import ITSupport from './pages/ITSupport';
+import FieldOps from './pages/FieldOps';
+import Calendar from './pages/Calendar';
+import Expenses from './pages/Expenses';
+import AuditLog from './pages/AuditLog';
 import Login from './pages/Login';
 import MyTasks from './pages/MyTasks';
-import { Bell, Search, LogOut, X, Clock, ShieldAlert, Sparkles, PartyPopper, CheckCircle2 } from 'lucide-react';
+import DailyAgenda from './pages/DailyAgenda';
+import Training from './pages/Training';
+import Messages from './pages/Messages';
+import { Bell, Search, LogOut, X, Clock, ShieldAlert, Sparkles, PartyPopper, CheckCircle2, Megaphone, MessageSquare, Command } from 'lucide-react';
 import Logo from './components/Logo';
-import { User, Employee, Notification, Task, LeaveRequest, ResignationRequest } from './types';
+import CommandPalette from './components/CommandPalette';
+import PageTransition from './components/PageTransition';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  User, 
+  Employee, 
+  Notification, 
+  Task, 
+  LeaveRequest, 
+  ResignationRequest, 
+  AuditLogEntry,
+  BroadcastMessage,
+  FollowUpReminder,
+  InternalMessage,
+  InventoryItem,
+  TrainingModule,
+  PerformanceReview
+} from './types';
 import { MOCK_EMPLOYEES } from './constants';
 
 const App: React.FC = () => {
@@ -24,10 +51,73 @@ const App: React.FC = () => {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [resignationRequests, setResignationRequests] = useState<ResignationRequest[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [broadcasts, setBroadcasts] = useState<BroadcastMessage[]>([
+    {
+      id: 'b1',
+      title: 'New Compliance Policy 2024',
+      content: 'All recovery agents must complete the new RBI compliance training by end of this month.',
+      authorId: 'emp-md',
+      authorName: 'Srinidhi Rao',
+      timestamp: '2024-05-15 09:00 AM',
+      priority: 'High'
+    }
+  ]);
+  const [reminders, setReminders] = useState<FollowUpReminder[]>([
+    { id: 'r1', caseId: 'REC-001', customerName: 'John Doe', agentId: 'emp-alice', dueDate: '2024-05-20', type: 'Call', status: 'Pending' },
+    { id: 'r2', caseId: 'REC-002', customerName: 'Jane Smith', agentId: 'emp-bob', dueDate: '2024-05-21', type: 'Visit', status: 'Pending' },
+  ]);
+  const [internalMessages, setInternalMessages] = useState<InternalMessage[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([
+    { id: 'inv-1', assetId: 'ASSET-001', name: 'MacBook Pro M2', category: 'Computing', serialNumber: 'SN123456', status: 'Assigned', assignedTo: 'Alice Johnson', purchaseDate: '2023-01-15', condition: 'New' },
+    { id: 'inv-2', assetId: 'ASSET-002', name: 'Dell Monitor 27"', category: 'Peripherals', serialNumber: 'SN789012', status: 'In Stock', purchaseDate: '2023-02-20', condition: 'Good' },
+  ]);
+  const [trainingModules, setTrainingModules] = useState<TrainingModule[]>([
+    {
+      id: 'tr-1',
+      title: 'RBI Recovery Guidelines 2024',
+      description: 'Essential training on the latest RBI guidelines for debt recovery and customer interaction.',
+      category: 'Compliance',
+      duration: '45 mins',
+      quiz: [
+        { id: 'q1', question: 'What is the maximum time an agent can call a customer?', options: ['7 AM - 7 PM', '8 AM - 7 PM', '9 AM - 8 PM', '8 AM - 8 PM'], correctAnswer: 1 }
+      ],
+      completedBy: ['emp-alice']
+    }
+  ]);
+  const [appraisals, setAppraisals] = useState<PerformanceReview[]>([]);
+
+  const logAction = (module: string, action: string, details: string) => {
+    if (!user) return;
+    const newEntry: AuditLogEntry = {
+      id: `LOG-${Date.now()}`,
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      module,
+      action,
+      details,
+      timestamp: new Date().toLocaleString(),
+    };
+    setAuditLogs(prev => [newEntry, ...prev]);
+  };
   const [showNotifications, setShowNotifications] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
   const currentEmployee = employees.find(e => e.id === user?.id);
+
+  // Keyboard shortcut for Command Palette
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Enforcement logic: If password change is required, lock the user to the security tab
   useEffect(() => {
@@ -79,6 +169,10 @@ const App: React.FC = () => {
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
   };
 
+  const clearAllNotifications = () => {
+    setNotifications([]);
+  };
+
   const userNotifications = notifications.filter(n => n.userId === user?.id || (user?.role === 'HR'));
   const unreadCount = userNotifications.filter(n => !n.isRead).length;
 
@@ -94,6 +188,11 @@ const App: React.FC = () => {
     }));
   };
 
+  const handleCompleteReminder = (id: string) => {
+    setReminders(prev => prev.map(r => r.id === id ? { ...r, status: 'Completed' } : r));
+    logAction('Daily Agenda', 'Complete Task', `Marked follow-up task ${id} as completed`);
+  };
+
   const renderContent = () => {
     if (!user) return null;
     
@@ -104,11 +203,23 @@ const App: React.FC = () => {
 
     switch (activeTab) {
       case 'dashboard': return <Dashboard />;
-      case 'tasks': return currentEmployee ? <MyTasks employee={currentEmployee} onUpdateTask={handleUpdateTaskStatus} /> : <Dashboard />;
-      case 'profiles': return user.role === 'HR' ? <Employees employees={employees} setEmployees={setEmployees} addNotification={addNotification} /> : <Dashboard />;
+      case 'calendar': return <Calendar employees={employees} />;
+      case 'expenses': return <Expenses user={user} addNotification={addNotification} logAction={logAction} />;
+      case 'crm': return <RecoveryCRM user={user} addNotification={addNotification} logAction={logAction} />;
+      case 'field-ops': return <FieldOps user={user} addNotification={addNotification} />;
+      case 'it-support': return <ITSupport user={user} addNotification={addNotification} logAction={logAction} />;
+      case 'tasks': 
+        if (user.role === 'RecoveryAgent' || user.role === 'FieldOfficer') {
+          return <DailyAgenda user={user} reminders={reminders.filter(r => r.agentId === user.id)} onComplete={handleCompleteReminder} />;
+        }
+        return currentEmployee ? <MyTasks employee={currentEmployee} onUpdateTask={handleUpdateTaskStatus} /> : <Dashboard />;
+      case 'profiles': return user.role === 'HR' ? <Employees employees={employees} setEmployees={setEmployees} addNotification={addNotification} logAction={logAction} /> : <Dashboard />;
       case 'recruitment': return user.role === 'HR' ? <Recruitment /> : <Dashboard />;
-      case 'performance': return <Performance />;
+      case 'performance': return <Appraisals user={user} appraisals={appraisals} employees={employees} logAction={logAction} />;
+      case 'training': return <Training user={user} modules={trainingModules} logAction={logAction} />;
+      case 'messages': return <Messages user={user} messages={internalMessages} setMessages={setInternalMessages} employees={employees} />;
       case 'attendance': return <Attendance user={user} />;
+      case 'audit-log': return (user.role === 'HR' || user.role === 'ITAdmin') ? <AuditLog logs={auditLogs} /> : <Dashboard />;
       case 'leave': return (
         <LeaveManagement 
           user={user} 
@@ -118,6 +229,14 @@ const App: React.FC = () => {
           employees={employees}
         />
       );
+      case 'inventory': return (user.role === 'HR' || user.role === 'ITAdmin') ? (
+        <Assets 
+          user={user}
+          inventory={inventory}
+          setInventory={setInventory}
+          logAction={logAction}
+        />
+      ) : <Dashboard />;
       case 'exit': return (
         <ExitManagement
           user={user}
@@ -232,14 +351,17 @@ const App: React.FC = () => {
              <span className="font-bold text-sm tracking-tight text-[#1e3a8a] uppercase">Srinidhi</span>
           </div>
           
-          <div className="hidden md:flex items-center bg-white rounded-xl border border-gray-200 px-4 py-2 w-96 shadow-sm focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
-            <Search className="text-gray-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Quick search records..." 
-              className="bg-transparent border-none outline-none text-sm ml-2 w-full font-medium"
-              disabled={!!currentEmployee?.mustChangePassword}
-            />
+          <div 
+            onClick={() => !currentEmployee?.mustChangePassword && setIsCommandPaletteOpen(true)}
+            className="hidden md:flex items-center bg-white rounded-xl border border-gray-200 px-4 py-2 w-96 shadow-sm hover:border-blue-500/50 cursor-pointer transition-all group"
+          >
+            <Search className="text-gray-400 group-hover:text-blue-900" size={18} />
+            <div className="text-gray-400 text-sm ml-2 w-full font-medium flex items-center justify-between">
+              <span>Quick search records...</span>
+              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-50 border border-gray-100 rounded text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                <Command size={8} /> K
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center gap-4">
@@ -279,8 +401,14 @@ const App: React.FC = () => {
                       ))
                     )}
                   </div>
-                  <div className="p-3 text-center bg-gray-50">
-                    <button className="text-[10px] font-bold uppercase tracking-widest text-blue-900 hover:underline">View All Notifications</button>
+                  <div className="p-3 text-center bg-gray-50 flex items-center justify-center gap-4">
+                    <button className="text-[10px] font-black uppercase tracking-widest text-blue-900 hover:underline">View All</button>
+                    <button 
+                      onClick={clearAllNotifications}
+                      className="text-[10px] font-black uppercase tracking-widest text-red-600 hover:underline"
+                    >
+                      Clear All
+                    </button>
                   </div>
                 </div>
               )}
@@ -301,9 +429,22 @@ const App: React.FC = () => {
         </nav>
 
         <div className="max-w-7xl mx-auto">
-          {renderContent()}
+          <AnimatePresence mode="wait">
+            <PageTransition key={activeTab}>
+              {renderContent()}
+            </PageTransition>
+          </AnimatePresence>
         </div>
       </main>
+
+      <CommandPalette 
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onNavigate={(path) => {
+          setActiveTab(path);
+          setIsCommandPaletteOpen(false);
+        }}
+      />
     </div>
   );
 };

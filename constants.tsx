@@ -13,9 +13,18 @@ import {
   ShieldCheck,
   Lock,
   Plane,
-  LogOut
+  LogOut,
+  Package,
+  Database,
+  LifeBuoy,
+  MapPin,
+  BarChart3,
+  DollarSign,
+  GraduationCap,
+  MessageSquare,
+  Megaphone
 } from 'lucide-react';
-import { UserRole, Employee } from './types';
+import { UserRole, Employee, LeaveBalance } from './types';
 
 export interface NavItem {
   id: string;
@@ -25,24 +34,59 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, roles: ['HR', 'Employee'] },
-  { id: 'tasks', label: 'My Tasks', icon: <ClipboardList size={20} />, roles: ['Employee'] },
-  { id: 'leave', label: 'Leave Mgmt', icon: <Plane size={20} />, roles: ['HR', 'Employee'] },
+  { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, roles: ['HR', 'Employee', 'RecoveryAgent', 'FieldOfficer', 'ITAdmin'] },
+  { id: 'calendar', label: 'Calendar', icon: <Calendar size={20} />, roles: ['HR', 'Employee', 'RecoveryAgent', 'FieldOfficer', 'ITAdmin'] },
+  { id: 'expenses', label: 'Expenses', icon: <DollarSign size={20} />, roles: ['HR', 'Employee', 'RecoveryAgent', 'FieldOfficer', 'ITAdmin'] },
+  { id: 'crm', label: 'Recovery CRM', icon: <Database size={20} />, roles: ['HR', 'RecoveryAgent'] },
+  { id: 'field-ops', label: 'Field Ops', icon: <MapPin size={20} />, roles: ['HR', 'FieldOfficer'] },
+  { id: 'it-support', label: 'IT Support', icon: <LifeBuoy size={20} />, roles: ['HR', 'Employee', 'RecoveryAgent', 'FieldOfficer', 'ITAdmin'] },
+  { id: 'tasks', label: 'My Tasks', icon: <ClipboardList size={20} />, roles: ['Employee', 'RecoveryAgent', 'FieldOfficer'] },
+  { id: 'leave', label: 'Leave Mgmt', icon: <Plane size={20} />, roles: ['HR', 'Employee', 'RecoveryAgent', 'FieldOfficer'] },
+  { id: 'inventory', label: 'Inventory', icon: <Package size={20} />, roles: ['HR', 'ITAdmin'] },
   { id: 'exit', label: 'Exit Mgmt', icon: <LogOut size={20} />, roles: ['HR', 'Employee'] },
   { id: 'profiles', label: 'Profiles', icon: <UserCircle size={20} />, roles: ['HR'] },
   { id: 'documents', label: 'Documents', icon: <FileText size={20} />, roles: ['HR', 'Employee'] },
   { id: 'recruitment', label: 'Recruitment', icon: <Briefcase size={20} />, roles: ['HR'] },
-  { id: 'performance', label: 'Performance', icon: <TrendingUp size={20} />, roles: ['HR', 'Employee'] },
-  { id: 'attendance', label: 'Attendance Mgmt', icon: <Clock size={20} />, roles: ['HR', 'Employee'] },
-  { id: 'security', label: 'Security', icon: <Lock size={20} />, roles: ['HR', 'Employee'] },
+  { id: 'performance', label: 'Performance', icon: <TrendingUp size={20} />, roles: ['HR', 'Employee', 'RecoveryAgent', 'FieldOfficer'] },
+  { id: 'training', label: 'Training', icon: <GraduationCap size={20} />, roles: ['HR', 'Employee', 'RecoveryAgent', 'FieldOfficer'] },
+  { id: 'messages', label: 'Messages', icon: <MessageSquare size={20} />, roles: ['HR', 'Employee', 'RecoveryAgent', 'FieldOfficer', 'ITAdmin'] },
+  { id: 'attendance', label: 'Attendance Mgmt', icon: <Clock size={20} />, roles: ['HR', 'Employee', 'RecoveryAgent', 'FieldOfficer'] },
+  { id: 'security', label: 'Security', icon: <Lock size={20} />, roles: ['HR', 'Employee', 'RecoveryAgent', 'FieldOfficer', 'ITAdmin'] },
+  { id: 'audit-log', label: 'Audit Log', icon: <ClipboardList size={20} />, roles: ['HR', 'ITAdmin'] },
+];
+
+// Hierarchy Roles that MUST have full access
+export const HIERARCHY_ADMIN_DESIGNATIONS = [
+  'Managing Director',
+  'Executive Director',
+  'IT Head',
+  'HR Head',
+  'Admin Head'
 ];
 
 export const MOCK_EMPLOYEES: Employee[] = [
+  { 
+    id: 'emp-md', 
+    employeeId: 'SA-MD-01',
+    name: 'Srinidhi Rao', 
+    role: 'Managing Director', 
+    accessRole: 'HR',
+    department: 'Executive Office', 
+    email: 'md@srinidhi.com', 
+    password: 'password123',
+    status: 'Active', 
+    avatar: 'https://picsum.photos/seed/rao/100/100', 
+    joinDate: '2010-01-01',
+    hasLoggedInBefore: true,
+    tasks: [],
+    documents: []
+  },
   { 
     id: 'emp-alice', 
     employeeId: 'SA-001',
     name: 'Alice Johnson', 
     role: 'Senior Developer', 
+    accessRole: 'Employee',
     department: 'Engineering', 
     email: 'alice.j@srinidhi.com', 
     password: 'password123',
@@ -73,6 +117,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     employeeId: 'SA-002',
     name: 'Bob Smith', 
     role: 'Product Manager', 
+    accessRole: 'Employee',
     department: 'Product', 
     email: 'bob.s@srinidhi.com', 
     password: 'password123',
@@ -90,6 +135,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     employeeId: 'SA-003',
     name: 'Charlie Davis', 
     role: 'UI Designer', 
+    accessRole: 'Employee',
     department: 'Design', 
     email: 'charlie.d@srinidhi.com', 
     password: 'password123',
@@ -105,6 +151,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     employeeId: 'SA-004',
     name: 'Diana Prince', 
     role: 'HR Specialist', 
+    accessRole: 'HR',
     department: 'Human Resources', 
     email: 'diana.p@srinidhi.com', 
     password: 'password123',
@@ -119,4 +166,12 @@ export const MOCK_EMPLOYEES: Employee[] = [
   },
 ];
 
-export const DEPARTMENTS = ['Engineering', 'Product', 'Design', 'Sales', 'Marketing', 'Human Resources', 'Finance', 'Operations'];
+export const LEAVE_BALANCES: LeaveBalance[] = [
+  { type: 'Annual', total: 18, used: 4, available: 14 },
+  { type: 'Sick', total: 12, used: 2, available: 10 },
+  { type: 'Personal', total: 6, used: 1, available: 5 },
+  { type: 'Maternity/Paternity', total: 90, used: 0, available: 90 },
+];
+
+export const DEPARTMENTS = ['Engineering', 'Product', 'Design', 'Sales', 'Marketing', 'Human Resources', 'Finance', 'Operations', 'Executive Office'];
+export const INVENTORY_CATEGORIES = ['Computing', 'Peripherals', 'Furniture', 'Networking', 'Mobile Devices'];

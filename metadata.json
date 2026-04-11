@@ -1,5 +1,5 @@
 {
   "name": "SRINIDHI ASSOCIATES_HRMS",
-  "description": "Professional HRMS for Srinidhi Associates.",
-  "requestFramePermissions": []
+  "description": "Professional HRMS and CRM for Srinidhi Associates Banking Recovery Services.",
+  "requestFramePermissions": ["camera", "geolocation"]
 }

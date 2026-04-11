@@ -70,11 +70,11 @@ const Login: React.FC<LoginProps> = ({ onLogin, employees, setEmployees }) => {
             : emp
         ));
 
-        const userRole: UserRole = employee.role.includes('HR') ? 'HR' : 'Employee';
+        // Use the explicit accessRole defined in the employee registry
         const user: User = {
           id: employee.id,
           name: employee.name,
-          role: userRole,
+          role: employee.accessRole,
           email: employee.email,
           avatar: employee.avatar
         };

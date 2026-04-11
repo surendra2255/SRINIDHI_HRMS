@@ -15,21 +15,33 @@ import {
   Unlock,
   MailCheck,
   Filter,
-  Briefcase
+  Briefcase,
+  ShieldCheck,
+  UserCog,
+  Shield,
+  Crown,
+  Medal,
+  Award
 } from 'lucide-react';
-import { DEPARTMENTS } from '../constants';
-import { Employee, Task } from '../types';
+import { DEPARTMENTS, HIERARCHY_ADMIN_DESIGNATIONS } from '../constants';
+import { Employee, Task, UserRole } from '../types';
+import { exportToCSV } from '../lib/exportUtils';
+import { sendEmailNotification } from '../lib/emailUtils';
+import TwoFactorModal from '../components/TwoFactorModal';
+import { motion, AnimatePresence } from 'motion/react';
+import confetti from 'canvas-confetti';
 
 interface EmployeesProps {
   employees: Employee[];
   setEmployees: React.Dispatch<React.SetStateAction<Employee[]>>;
   addNotification: (userId: string, title: string, message: string) => void;
+  logAction: (module: string, action: string, details: string) => void;
 }
 
 type ViewMode = 'list' | 'grid' | 'compact';
 type TaskFilterType = 'All' | 'No Tasks' | 'Has Tasks';
 
-const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotification }) => {
+const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotification, logAction }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [deptFilter, setDeptFilter] = useState('All');
@@ -45,6 +57,8 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
   const [employeeToFreeze, setEmployeeToFreeze] = useState<Employee | null>(null);
   const [isDeleteConfirmed, setIsDeleteConfirmed] = useState(false);
+  const [is2FAModalOpen, setIs2FAModalOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<'Low' | 'Medium' | 'High'>('Medium');
@@ -58,19 +72,58 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
   // Task search state for the slide-over
   const [taskSearchTerm, setTaskSearchTerm] = useState('');
 
+  // Mock presence data
+  const [activeViewers, setActiveViewers] = useState<{id: string, name: string, avatar: string}[]>([]);
+
+  useEffect(() => {
+    if (viewingEmployee) {
+      // Simulate other HR managers joining/leaving
+      const mockViewers = [
+        { id: 'v1', name: 'Priya Sharma', avatar: 'https://picsum.photos/seed/priya/100/100' },
+        { id: 'v2', name: 'Rahul Verma', avatar: 'https://picsum.photos/seed/rahul/100/100' }
+      ];
+      setActiveViewers(mockViewers.slice(0, Math.floor(Math.random() * 3)));
+    } else {
+      setActiveViewers([]);
+    }
+  }, [viewingEmployee]);
+
+  const container = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.05
+      }
+    }
+  };
+
+  const item = {
+    hidden: { opacity: 0, y: 10 },
+    show: { opacity: 1, y: 0 }
+  };
+
   const [newEmp, setNewEmp] = useState({
     employeeId: '',
     name: '',
     role: '',
+    accessRole: 'Employee' as UserRole,
     department: DEPARTMENTS[0],
     email: '',
     password: 'Password123!',
     status: 'Active' as const
   });
 
+  // Automatically switch to 'HR' accessRole if a Hierarchy role is selected
+  useEffect(() => {
+    if (HIERARCHY_ADMIN_DESIGNATIONS.includes(newEmp.role)) {
+      setNewEmp(prev => ({ ...prev, accessRole: 'HR' }));
+    }
+  }, [newEmp.role]);
+
   // Real-time validation states
-  const idRegex = /^SA-\d+$/;
-  const isIdFormatValid = idRegex.test(newEmp.employeeId);
+  const idRegex = /^SA-[A-Z]*\d+$/; // Updated to allow MD codes etc
+  const isIdFormatValid = idRegex.test(newEmp.employeeId) || newEmp.employeeId.length > 3;
   const isIdUnique = !employees.some(emp => emp.employeeId.toUpperCase() === newEmp.employeeId.toUpperCase());
   const canSubmit = isIdFormatValid && isIdUnique && newEmp.name && newEmp.email && newEmp.role && newEmp.password;
 
@@ -83,7 +136,6 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
   const filteredEmployees = employees.filter(emp => {
     const term = searchTerm.toLowerCase();
     
-    // Case-insensitive filtering and partial matching for name, role, department, email, and ID
     const matchesSearch = 
       emp.name.toLowerCase().includes(term) ||
       emp.role.toLowerCase().includes(term) ||
@@ -157,53 +209,48 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
 
   const handleDeleteEmployee = () => {
     if (!employeeToDelete || !isDeleteConfirmed) return;
-    setEmployees(prev => prev.filter(emp => emp.id !== employeeToDelete.id));
+    setPendingDeleteId(employeeToDelete.id);
+    setIs2FAModalOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (!pendingDeleteId) return;
+    const emp = employees.find(e => e.id === pendingDeleteId);
+    setEmployees(prev => prev.filter(e => e.id !== pendingDeleteId));
+    if (emp) {
+      logAction('Employees', 'Delete Employee', `Deleted employee: ${emp.name} (${emp.employeeId})`);
+    }
     setEmployeeToDelete(null);
     setIsDeleteConfirmed(false);
+    setPendingDeleteId(null);
     setMenuOpenId(null);
   };
 
   const handleFreezeEmployee = () => {
     if (!employeeToFreeze || !isDeleteConfirmed) return;
     updateEmployeeStatus(employeeToFreeze.id, 'Frozen');
+    logAction('Employees', 'Freeze Employee', `Froze employee account: ${employeeToFreeze.name} (${employeeToFreeze.employeeId})`);
     setEmployeeToFreeze(null);
     setIsDeleteConfirmed(false);
   };
 
   const handleExportCSV = () => {
-    const headers = ['Employee ID', 'Name', 'Role', 'Department', 'Status'];
-    const rows = filteredEmployees.map(emp => [
-      emp.employeeId,
-      emp.name,
-      emp.role,
-      emp.department,
-      emp.status
-    ]);
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `srinidhi_personnel_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    exportToCSV(filteredEmployees, 'employee_directory', {
+      employeeId: 'Employee ID',
+      name: 'Name',
+      role: 'Designation',
+      department: 'Department',
+      email: 'Email',
+      status: 'Status',
+      accessRole: 'Access Role',
+      joinDate: 'Joining Date'
+    });
+    logAction('Employees', 'Export Data', `Exported ${filteredEmployees.length} employees to CSV`);
   };
 
   const handleAddEmployee = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
-    
-    if (!isIdFormatValid) {
-      setFormError("Format Mismatch: Employee ID must follow the 'SA-XXXX' pattern.");
-      return;
-    }
     
     if (!isIdUnique) {
       setFormError(`Registry Conflict: The identifier '${newEmp.employeeId}' is already assigned.`);
@@ -225,10 +272,25 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
     setEmployees(prev => [employee, ...prev]);
     setIsAddingEmployee(false);
     
-    setNewEmp({ employeeId: '', name: '', role: '', department: DEPARTMENTS[0], email: '', password: 'Password123!', status: 'Active' });
+    setNewEmp({ employeeId: '', name: '', role: '', accessRole: 'Employee', department: DEPARTMENTS[0], email: '', password: 'Password123!', status: 'Active' });
     setShowNewEmpPassword(false);
 
-    alert(`Onboarding Initiated:\nPersonnel profile for ${employee.name} created successfully.`);
+    addNotification(employee.id, 'Welcome to Srinidhi Associates!', 'Your account has been created. Please log in with your credentials.');
+    logAction('Employees', 'Create Employee', `Created new employee: ${employee.name} (${employee.employeeId})`);
+
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { y: 0.6 },
+      colors: ['#1e3a8a', '#ef4444', '#f59e0b']
+    });
+
+    // Send onboarding email
+    sendEmailNotification(
+      employee.email,
+      'Welcome to Srinidhi Associates - Your Account is Ready',
+      `Dear ${employee.name},\n\nWelcome to the team! Your employee profile has been created.\n\nEmployee ID: ${employee.employeeId}\nRole: ${employee.role}\n\nPlease log in to the HRMS portal to complete your onboarding.`
+    );
   };
 
   const handleAdminResetPassword = () => {
@@ -286,6 +348,25 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
           </span>
         )}
       </div>
+    );
+  };
+
+  const AccessBadge = ({ emp }: { emp: Employee }) => {
+    const isHierarchyRole = HIERARCHY_ADMIN_DESIGNATIONS.includes(emp.role);
+    if (isHierarchyRole) {
+      return (
+        <span className="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border flex items-center w-fit gap-1.5 bg-amber-50 text-amber-700 border-amber-200 shadow-sm animate-pulse">
+          <Crown size={10} /> Executive Authority
+        </span>
+      );
+    }
+    return (
+      <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border flex items-center w-fit gap-1.5 ${
+        emp.accessRole === 'HR' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-blue-50 text-blue-600 border-blue-100'
+      }`}>
+        {emp.accessRole === 'HR' ? <ShieldCheck size={10} /> : <UserCog size={10} />}
+        {emp.accessRole === 'HR' ? 'Administrator' : 'Normal User'}
+      </span>
     );
   };
 
@@ -377,41 +458,59 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
             </th>
             <th className="px-6 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Employee ID</th>
             <th className="px-6 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Profile</th>
+            <th className="px-6 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">Access Level</th>
             <th className="px-6 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Department</th>
             <th className="px-6 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
             <th className="px-6 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
-          {filteredEmployees.map(emp => {
-            const isSelected = selectedIds.includes(emp.id);
-            return (
-              <tr 
-                key={emp.id} 
-                onClick={() => { setViewingEmployee(emp); setTaskSearchTerm(''); }} 
-                className={`hover:bg-blue-50/30 transition-all cursor-pointer ${isSelected ? 'bg-blue-50/50' : ''}`}
-              >
-                <td className="px-6 py-4">
-                  <button onClick={(e) => toggleSelect(emp.id, e)} className={`w-5 h-5 rounded flex items-center justify-center transition-all ${isSelected ? 'bg-blue-900 text-white shadow-sm' : 'bg-white border border-gray-200 text-transparent'}`}>
-                    {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
-                  </button>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-gray-400">{emp.employeeId}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center gap-4">
-                    <img src={emp.avatar} alt="" className="w-10 h-10 rounded-2xl object-cover" />
-                    <div>
-                      <p className="text-sm font-bold text-blue-900">{emp.name}</p>
-                      <p className="text-[11px] text-gray-400 font-bold uppercase">{emp.role}</p>
+          <AnimatePresence mode="popLayout">
+            {filteredEmployees.map(emp => {
+              const isSelected = selectedIds.includes(emp.id);
+              return (
+                <motion.tr 
+                  key={emp.id} 
+                  variants={item}
+                  initial="hidden"
+                  animate="show"
+                  exit={{ opacity: 0, x: -20 }}
+                  layout
+                  onClick={() => { setViewingEmployee(emp); setTaskSearchTerm(''); }} 
+                  className={`hover:bg-blue-50/30 transition-all cursor-pointer ${isSelected ? 'bg-blue-50/50' : ''}`}
+                >
+                  <td className="px-6 py-4">
+                    <button onClick={(e) => toggleSelect(emp.id, e)} className={`w-5 h-5 rounded flex items-center justify-center transition-all ${isSelected ? 'bg-blue-900 text-white shadow-sm' : 'bg-white border border-gray-200 text-transparent'}`}>
+                      {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+                    </button>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-gray-400">{emp.employeeId}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-4">
+                      <div className="relative">
+                         <img src={emp.avatar} alt="" className="w-10 h-10 rounded-2xl object-cover" />
+                         {HIERARCHY_ADMIN_DESIGNATIONS.includes(emp.role) && (
+                           <div className="absolute -top-1 -right-1 bg-amber-500 text-white rounded-full p-0.5 shadow-sm border border-white">
+                              <Crown size={8} />
+                           </div>
+                         )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-blue-900">{emp.name}</p>
+                        <p className="text-[11px] text-gray-400 font-bold uppercase">{emp.role}</p>
+                      </div>
                     </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-[11px] font-bold text-gray-500 uppercase">{emp.department}</td>
-                <td className="px-6 py-4 whitespace-nowrap"><StatusBadge emp={emp} /></td>
-                <td className="px-6 py-4 text-right"><ActionMenu emp={emp} /></td>
-              </tr>
-            );
-          })}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <AccessBadge emp={emp} />
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-[11px] font-bold text-gray-500 uppercase">{emp.department}</td>
+                  <td className="px-6 py-4 whitespace-nowrap"><StatusBadge emp={emp} /></td>
+                  <td className="px-6 py-4 text-right"><ActionMenu emp={emp} /></td>
+                </motion.tr>
+              );
+            })}
+          </AnimatePresence>
         </tbody>
       </table>
     </div>
@@ -421,6 +520,7 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
     <div key="grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in fade-in zoom-in-95 duration-500">
       {filteredEmployees.map(emp => {
         const isSelected = selectedIds.includes(emp.id);
+        const isHierarchy = HIERARCHY_ADMIN_DESIGNATIONS.includes(emp.role);
         return (
           <div 
             key={emp.id} 
@@ -439,9 +539,21 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
               <ActionMenu emp={emp} />
             </div>
             <div className="flex flex-col items-center text-center">
-              <img src={emp.avatar} alt="" className="w-20 h-20 rounded-[2rem] object-cover mb-4 shadow-md border-4 border-white" />
+              <div className="relative mb-4">
+                 <img src={emp.avatar} alt="" className={`w-20 h-20 rounded-[2rem] object-cover shadow-md border-4 ${isHierarchy ? 'border-amber-100 ring-2 ring-amber-500/20' : 'border-white'}`} />
+                 {isHierarchy && (
+                   <div className="absolute -bottom-2 -right-2 bg-amber-500 text-white p-1.5 rounded-xl shadow-lg border-2 border-white">
+                      <Crown size={14} />
+                   </div>
+                 )}
+              </div>
               <h3 className="text-sm font-bold text-blue-900 mb-1">{emp.name}</h3>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">{emp.role}</p>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{emp.role}</p>
+              
+              <div className="mb-4">
+                <AccessBadge emp={emp} />
+              </div>
+
               <div className="flex flex-col gap-2 w-full">
                 <div className="flex items-center justify-between bg-gray-50 p-2 rounded-xl">
                   <span className="text-[9px] font-black text-gray-400 uppercase">Dept</span>
@@ -466,6 +578,7 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
     <div key="compact" className="space-y-2 animate-in fade-in zoom-in-95 duration-500">
       {filteredEmployees.map(emp => {
         const isSelected = selectedIds.includes(emp.id);
+        const isHierarchy = HIERARCHY_ADMIN_DESIGNATIONS.includes(emp.role);
         return (
           <div 
             key={emp.id} 
@@ -481,8 +594,12 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
               </button>
               <span className="text-[10px] font-black text-gray-300 w-16">{emp.employeeId}</span>
               <div className="flex items-center gap-3">
-                <img src={emp.avatar} alt="" className="w-8 h-8 rounded-xl object-cover" />
+                <img src={emp.avatar} alt="" className={`w-8 h-8 rounded-xl object-cover ${isHierarchy ? 'ring-1 ring-amber-500' : ''}`} />
                 <p className="text-xs font-bold text-blue-900">{emp.name}</p>
+                {isHierarchy && <Crown size={12} className="text-amber-500" />}
+                <span className={`text-[8px] font-black uppercase border px-1.5 rounded ${emp.accessRole === 'HR' ? 'text-red-500 border-red-200' : 'text-blue-500 border-blue-200'}`}>
+                  {emp.accessRole === 'HR' ? 'Admin' : 'User'}
+                </span>
               </div>
             </div>
             <div className="flex items-center gap-8">
@@ -644,7 +761,7 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
             <div className="flex items-center gap-2">
               <button 
                 onClick={handleBulkDelete}
-                className="px-6 py-3 bg-red-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 transition-all active:scale-95 shadow-xl flex items-center gap-2"
+                className="px-6 py-3 bg-red-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-50 transition-all active:scale-95 shadow-xl flex items-center gap-2"
               >
                 <Trash2 size={14} /> Bulk Delete
               </button>
@@ -654,126 +771,6 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
               >
                 <X size={18} />
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODALS */}
-      {/* (Previous modals for Delete/Freeze/Add/View remain same, ensured they work with new structure) */}
-
-      {/* FREEZE CONFIRMATION MODAL */}
-      {employeeToFreeze && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-blue-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setEmployeeToFreeze(null)}></div>
-          <div className="relative bg-white rounded-[3rem] p-10 max-md w-full shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-400">
-            <div className="flex flex-col items-center text-center">
-              <div className="w-24 h-24 bg-blue-50 text-blue-600 rounded-[2.5rem] flex items-center justify-center mb-8 shadow-inner">
-                <Snowflake size={48} />
-              </div>
-              <h2 className="text-3xl font-black text-blue-900 mb-2 uppercase tracking-tighter leading-none">Freeze Access</h2>
-              <p className="text-sm text-gray-500 mb-6 font-bold uppercase tracking-widest leading-relaxed">
-                Immediately suspend access for <span className="text-blue-900 font-black">{employeeToFreeze.name}</span>?
-              </p>
-              
-              <div className="w-full bg-blue-50 p-6 rounded-3xl border border-blue-100 mb-8 text-left">
-                <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-2">Security Implications</p>
-                <ul className="text-[11px] text-blue-900 font-bold space-y-2">
-                  <li className="flex items-center gap-2">• Login will be instantly prohibited</li>
-                  <li className="flex items-center gap-2">• Data modification will be locked</li>
-                  <li className="flex items-center gap-2">• Task participation will be suspended</li>
-                </ul>
-              </div>
-
-              <div className="w-full space-y-4 mb-10">
-                <button 
-                  onClick={() => setIsDeleteConfirmed(!isDeleteConfirmed)}
-                  className="flex items-start gap-3 text-left group transition-all"
-                >
-                  <div className={`mt-0.5 shrink-0 transition-all ${isDeleteConfirmed ? 'text-blue-600' : 'text-gray-300 group-hover:text-blue-300'}`}>
-                    {isDeleteConfirmed ? <CheckSquare size={20} /> : <Square size={20} />}
-                  </div>
-                  <span className={`text-[11px] font-bold uppercase tracking-tight leading-snug transition-all ${isDeleteConfirmed ? 'text-blue-700' : 'text-gray-400'}`}>
-                    I authorize the immediate freezing of this personnel account.
-                  </span>
-                </button>
-              </div>
-
-              <div className="flex flex-col w-full gap-3">
-                <button 
-                  onClick={handleFreezeEmployee}
-                  disabled={!isDeleteConfirmed}
-                  className={`w-full py-5 text-white rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl active:scale-95 ${
-                    isDeleteConfirmed ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20' : 'bg-gray-100 text-gray-300 cursor-not-allowed'
-                  }`}
-                >
-                  Execute Freeze
-                </button>
-                <button 
-                  onClick={() => setEmployeeToFreeze(null)}
-                  className="w-full py-5 bg-gray-50 text-gray-400 rounded-2xl font-black uppercase tracking-widest hover:bg-gray-100 transition-all active:scale-95"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* INDIVIDUAL DELETE MODAL */}
-      {employeeToDelete && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-blue-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setEmployeeToDelete(null)}></div>
-          <div className="relative bg-white rounded-[3rem] p-10 max-md w-full shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-400">
-            <div className="flex flex-col items-center text-center">
-              <div className="w-24 h-24 bg-red-50 text-red-600 rounded-[2.5rem] flex items-center justify-center mb-8 shadow-inner">
-                <Trash2 size={48} />
-              </div>
-              <h2 className="text-3xl font-black text-blue-900 mb-2 uppercase tracking-tighter leading-none">Purge Profile</h2>
-              <p className="text-sm text-gray-500 mb-6 font-bold uppercase tracking-widest leading-relaxed">
-                Permanently remove <span className="text-blue-900 font-black">{employeeToDelete.name}</span> from the organizational registry?
-              </p>
-              
-              <div className="w-full bg-red-50 p-6 rounded-3xl border border-red-100 mb-8 text-left">
-                <div className="flex items-center gap-3 mb-2">
-                  <Fingerprint size={18} className="text-red-600" />
-                  <p className="text-sm font-black text-red-700">{employeeToDelete.employeeId}</p>
-                </div>
-                <p className="text-[10px] font-black text-red-400 uppercase tracking-widest ml-7">Registry UID: {employeeToDelete.id}</p>
-              </div>
-
-              <div className="w-full space-y-4 mb-10">
-                <button 
-                  onClick={() => setIsDeleteConfirmed(!isDeleteConfirmed)}
-                  className="flex items-start gap-3 text-left group transition-all"
-                >
-                  <div className={`mt-0.5 shrink-0 transition-all ${isDeleteConfirmed ? 'text-red-600' : 'text-gray-300 group-hover:text-red-300'}`}>
-                    {isDeleteConfirmed ? <CheckSquare size={20} /> : <Square size={20} />}
-                  </div>
-                  <span className={`text-[11px] font-bold uppercase tracking-tight leading-snug transition-all ${isDeleteConfirmed ? 'text-red-700' : 'text-gray-400'}`}>
-                    I acknowledge that this personnel record and all associated history will be permanently erased. This action cannot be undone.
-                  </span>
-                </button>
-              </div>
-
-              <div className="flex flex-col w-full gap-3">
-                <button 
-                  onClick={handleDeleteEmployee}
-                  disabled={!isDeleteConfirmed}
-                  className={`w-full py-5 text-white rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl active:scale-95 ${
-                    isDeleteConfirmed ? 'bg-red-600 hover:bg-red-700 shadow-red-600/20' : 'bg-gray-100 text-gray-300 cursor-not-allowed'
-                  }`}
-                >
-                  Authorize Purge
-                </button>
-                <button 
-                  onClick={() => setEmployeeToDelete(null)}
-                  className="w-full py-5 bg-gray-50 text-gray-400 rounded-2xl font-black uppercase tracking-widest hover:bg-gray-100 transition-all active:scale-95"
-                >
-                  Cancel
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -791,14 +788,84 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
               </div>
               <button onClick={() => setIsAddingEmployee(false)} className="p-2 hover:bg-white/10 rounded-xl"><X size={24} /></button>
             </div>
-            <form onSubmit={handleAddEmployee} className="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar">
+            <form onSubmit={handleAddEmployee} className="flex-1 overflow-y-auto p-8 space-y-6 no-scrollbar">
               {formError && (
                 <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 animate-in slide-in-from-top-2">
                   <AlertTriangle className="text-red-600 shrink-0" size={18} />
                   <p className="text-xs font-bold text-red-700">{formError}</p>
                 </div>
               )}
+
+              {/* SECURITY LEVEL SELECTION */}
+              <div className="space-y-4">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Security Privilege</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button 
+                    type="button"
+                    onClick={() => setNewEmp({...newEmp, accessRole: 'Employee'})}
+                    className={`flex flex-col items-center gap-3 p-5 rounded-[1.5rem] border-2 transition-all group ${
+                      newEmp.accessRole === 'Employee' 
+                        ? 'border-blue-900 bg-blue-50 text-blue-900 ring-4 ring-blue-500/5 shadow-sm' 
+                        : 'border-gray-100 bg-gray-50 text-gray-400 hover:border-gray-200'
+                    }`}
+                  >
+                    <div className={`p-3 rounded-2xl transition-all ${newEmp.accessRole === 'Employee' ? 'bg-blue-900 text-white' : 'bg-white text-gray-300 group-hover:text-blue-400'}`}>
+                      <UserCog size={20} />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] font-black uppercase tracking-widest">Normal User</p>
+                      <p className="text-[9px] font-bold opacity-60 uppercase mt-1">Standard Access</p>
+                    </div>
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setNewEmp({...newEmp, accessRole: 'HR'})}
+                    className={`flex flex-col items-center gap-3 p-5 rounded-[1.5rem] border-2 transition-all group ${
+                      newEmp.accessRole === 'HR' 
+                        ? 'border-red-600 bg-red-50 text-red-600 ring-4 ring-red-500/5 shadow-sm' 
+                        : 'border-gray-100 bg-gray-50 text-gray-400 hover:border-gray-200'
+                    }`}
+                  >
+                    <div className={`p-3 rounded-2xl transition-all ${newEmp.accessRole === 'HR' ? 'bg-red-600 text-white' : 'bg-white text-gray-300 group-hover:text-red-400'}`}>
+                      <ShieldCheck size={20} />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] font-black uppercase tracking-widest">Administrator</p>
+                      <p className="text-[9px] font-bold opacity-60 uppercase mt-1">Full System Control</p>
+                    </div>
+                  </button>
+                </div>
+                <div className="p-3 bg-gray-50 border border-gray-100 rounded-2xl flex items-start gap-3">
+                   <Shield size={16} className="text-blue-400 shrink-0 mt-0.5" />
+                   <p className="text-[9px] text-gray-400 font-bold uppercase leading-relaxed">
+                     {newEmp.accessRole === 'HR' 
+                       ? "ALERT: Administrators oversee global inventory, all personnel files, and system overrides." 
+                       : "Normal Users are restricted to personal assignments and self-service modules."}
+                   </p>
+                </div>
+              </div>
+
               <div className="space-y-6">
+                {/* HIERARCHY ROLE SELECTION (Only for Administrators) */}
+                {newEmp.accessRole === 'HR' && (
+                  <div className="space-y-3 p-5 bg-amber-50 rounded-[1.5rem] border border-amber-100">
+                    <label className="text-[10px] font-black text-amber-600 uppercase tracking-widest ml-1 flex items-center gap-2">
+                      <Crown size={12} /> Privileged Hierarchy Designation
+                    </label>
+                    <select 
+                      className="w-full px-5 py-4 bg-white border border-amber-200 rounded-2xl outline-none font-bold text-xs text-amber-900 focus:ring-4 focus:ring-amber-500/10 transition-all"
+                      value={HIERARCHY_ADMIN_DESIGNATIONS.includes(newEmp.role) ? newEmp.role : ""}
+                      onChange={e => setNewEmp({...newEmp, role: e.target.value})}
+                    >
+                      <option value="">Custom Admin Title...</option>
+                      {HIERARCHY_ADMIN_DESIGNATIONS.map(role => (
+                        <option key={role} value={role}>{role}</option>
+                      ))}
+                    </select>
+                    <p className="text-[8px] text-amber-600/60 font-bold uppercase tracking-widest">Hierarchy roles automatically inherit master permissions.</p>
+                  </div>
+                )}
+
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Employee ID</label>
                   <div className="relative group mt-1">
@@ -815,17 +882,13 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
                       onChange={e => setNewEmp({...newEmp, employeeId: e.target.value.toUpperCase()})} 
                     />
                   </div>
-                  {!isIdFormatValid && newEmp.employeeId && (
-                    <p className="text-[10px] text-red-500 mt-1 font-bold">ID must start with 'SA-' followed by numbers.</p>
-                  )}
-                  {!isIdUnique && (
-                    <p className="text-[10px] text-red-500 mt-1 font-bold">This ID is already taken.</p>
-                  )}
                 </div>
+
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Full Legal Name</label>
                   <input required className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 focus:ring-blue-500/5 focus:bg-white transition-all" value={newEmp.name} onChange={e => setNewEmp({...newEmp, name: e.target.value})} />
                 </div>
+                
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Professional Email</label>
                   <input type="email" required className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 focus:ring-blue-500/5 focus:bg-white transition-all" value={newEmp.email} onChange={e => setNewEmp({...newEmp, email: e.target.value})} />
@@ -854,8 +917,14 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Position</label>
-                    <input required className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 focus:ring-blue-500/5 focus:bg-white transition-all" value={newEmp.role} onChange={e => setNewEmp({...newEmp, role: e.target.value})} />
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Designation</label>
+                    <input 
+                      required 
+                      className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 focus:ring-blue-500/5 focus:bg-white transition-all" 
+                      value={newEmp.role} 
+                      onChange={e => setNewEmp({...newEmp, role: e.target.value})} 
+                      placeholder="e.g. Lead Engineer"
+                    />
                   </div>
                   <div>
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Department</label>
@@ -866,16 +935,12 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
                 </div>
               </div>
               <div className="pt-4 space-y-4">
-                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center gap-3">
-                  <MailCheck size={18} className="text-blue-600" />
-                  <p className="text-[10px] text-blue-900 font-bold uppercase tracking-tight">Onboarding alert will be dispatched to saisurendra@srinidhiassociates.co.in</p>
-                </div>
                 <button 
                   type="submit" 
                   disabled={!canSubmit}
-                  className="w-full py-5 bg-blue-900 text-white rounded-[2rem] font-bold text-sm uppercase tracking-widest shadow-xl shadow-blue-900/20 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed"
+                  className={`w-full py-5 text-white rounded-[2rem] font-bold text-sm uppercase tracking-widest shadow-xl active:scale-95 transition-all disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed ${newEmp.accessRole === 'HR' ? 'bg-red-600 hover:bg-red-700 shadow-red-900/20' : 'bg-blue-900 hover:bg-blue-800 shadow-blue-900/20'}`}
                 >
-                  Initialize Profile
+                  Initialize {newEmp.accessRole === 'HR' ? 'Admin' : 'Personnel'} Profile
                 </button>
               </div>
             </form>
@@ -888,12 +953,33 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setViewingEmployee(null)} />
           <div className="absolute inset-y-0 right-0 max-w-lg w-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 border-l border-gray-100">
             <div className="p-8 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-blue-900 uppercase tracking-tighter">Personnel File</h2>
+              <div className="flex flex-col">
+                <h2 className="text-xl font-bold text-blue-900 uppercase tracking-tighter">Personnel File</h2>
+                {activeViewers.length > 0 && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex -space-x-2">
+                      {activeViewers.map(v => (
+                        <img key={v.id} src={v.avatar} title={`${v.name} is also viewing`} className="w-5 h-5 rounded-full border-2 border-white ring-1 ring-blue-100" alt="" />
+                      ))}
+                    </div>
+                    <span className="text-[8px] font-black text-blue-400 uppercase tracking-widest animate-pulse">
+                      {activeViewers.length} manager{activeViewers.length > 1 ? 's' : ''} viewing
+                    </span>
+                  </div>
+                )}
+              </div>
               <button onClick={() => setViewingEmployee(null)} className="p-2 hover:bg-gray-50 rounded-xl transition-all"><X size={24} /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-8 no-scrollbar space-y-12 pb-24">
               <div className="flex items-center gap-8">
-                <img src={viewingEmployee.avatar} className="w-28 h-28 rounded-[2.5rem] object-cover shadow-2xl shadow-blue-900/10 border-4 border-white" alt="" />
+                <div className="relative">
+                  <img src={viewingEmployee.avatar} className="w-28 h-28 rounded-[2.5rem] object-cover shadow-2xl shadow-blue-900/10 border-4 border-white" alt="" />
+                  {HIERARCHY_ADMIN_DESIGNATIONS.includes(viewingEmployee.role) && (
+                    <div className="absolute -bottom-2 -right-2 bg-amber-500 text-white p-2 rounded-2xl shadow-xl border-4 border-white">
+                      <Crown size={20} />
+                    </div>
+                  )}
+                </div>
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <Fingerprint size={12} className="text-blue-900/30" />
@@ -901,9 +987,9 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
                   </div>
                   <h3 className="text-2xl font-bold text-blue-900 tracking-tight">{viewingEmployee.name}</h3>
                   <p className="text-gray-500 font-medium">{viewingEmployee.role}</p>
-                  <div className="flex items-center gap-2 mt-2">
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                    <AccessBadge emp={viewingEmployee} />
                     <StatusBadge emp={viewingEmployee} />
-                    <span className="text-[9px] font-black text-gray-400 uppercase border px-2 py-0.5 rounded-lg">{viewingEmployee.department}</span>
                   </div>
                 </div>
               </div>
@@ -952,6 +1038,48 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
                   >
                     <Trash2 size={16} /> Purge
                   </button>
+                </div>
+              </div>
+
+              {/* Permissions Governance Panel */}
+              <div className="space-y-6">
+                <h4 className="text-xs font-black text-gray-400 uppercase flex items-center gap-2">
+                  <Shield size={16} className="text-blue-900" /> System Permissions
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    'View CRM', 'Manage CRM', 'View IT Support', 'Manage IT Support',
+                    'Field Access', 'Inventory Control', 'HR Management', 'Legal Access',
+                    'Manage Expenses'
+                  ].map(perm => (
+                    <label key={perm} className="flex items-center gap-3 p-4 bg-gray-50 rounded-2xl cursor-pointer hover:bg-blue-50 transition-all border border-transparent hover:border-blue-100 group">
+                      <input 
+                        type="checkbox" 
+                        checked={viewingEmployee.permissions?.includes(perm)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setEmployees(prev => prev.map(emp => 
+                            emp.id === viewingEmployee.id 
+                              ? { 
+                                  ...emp, 
+                                  permissions: checked 
+                                    ? [...(emp.permissions || []), perm] 
+                                    : (emp.permissions || []).filter(p => p !== perm)
+                                } 
+                              : emp
+                          ));
+                          setViewingEmployee(prev => prev ? {
+                            ...prev,
+                            permissions: checked 
+                              ? [...(prev.permissions || []), perm] 
+                              : (prev.permissions || []).filter(p => p !== perm)
+                          } : null);
+                        }}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-900 focus:ring-blue-900"
+                      />
+                      <span className="text-[10px] font-black text-blue-900 uppercase tracking-tight group-hover:text-blue-800">{perm}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
 
@@ -1041,17 +1169,19 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
                 <h4 className="text-xs font-black text-gray-400 uppercase flex items-center gap-2"><ShieldAlert size={16} className="text-orange-500" /> Security</h4>
                 <div className="rounded-[2rem] p-6 border bg-orange-50/50 border-orange-100 space-y-4">
                   <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-orange-200" size={18} />
-                    <input 
-                      type="password" 
-                      placeholder="New access token..." 
-                      className="w-full pl-12 pr-12 py-4 bg-white border border-orange-200 rounded-2xl text-sm outline-none font-bold" 
-                      value={adminResetPass} 
-                      onChange={(e) => setAdminResetPass(e.target.value)} 
-                    />
-                    <button onClick={handleAdminResetPassword} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-orange-600 text-white rounded-xl">
-                      <UserCheck size={20}/>
-                    </button>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-orange-200" size={18} />
+                      <input 
+                        type="password" 
+                        placeholder="New access token..." 
+                        className="w-full pl-12 pr-12 py-4 bg-white border border-orange-200 rounded-2xl text-sm outline-none font-bold" 
+                        value={adminResetPass} 
+                        onChange={(e) => setAdminResetPass(e.target.value)} 
+                      />
+                      <button onClick={handleAdminResetPassword} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-orange-600 text-white rounded-xl">
+                        <UserCheck size={20}/>
+                      </button>
+                    </div>
                   </div>
                   {resetSuccess && (
                     <div className="flex items-center gap-2 text-[10px] font-black text-green-700 uppercase tracking-widest animate-in fade-in">
@@ -1064,6 +1194,12 @@ const Employees: React.FC<EmployeesProps> = ({ employees, setEmployees, addNotif
           </div>
         </div>
       )}
+      <TwoFactorModal 
+        isOpen={is2FAModalOpen}
+        onClose={() => setIs2FAModalOpen(false)}
+        onVerify={confirmDelete}
+        actionName="Delete Employee Record"
+      />
     </div>
   );
 };
